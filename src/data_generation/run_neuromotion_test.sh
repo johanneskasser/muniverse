@@ -2,7 +2,7 @@
 set -e  # fail on first error
 
 # Initialize conda
-source /opt/conda/etc/profile.d/conda.sh
+source /opt/mambaforge/etc/profile.d/conda.sh
 
 # Activate NeuroMotion env
 conda activate NeuroMotion
