@@ -3,7 +3,7 @@ engine: "singularity"  # "docker" or "singularity"
 container_name: "environment/muniverse-test_neuromotion"
 
 # Paths
-sim_script: "src/data_generation/run_neuromotion.py"
+sim_script: "src/data_generation/_run_neuromotion.py"
 output_dir: "src/data_generation/"
 input_config: "src/data_generation/config_test.yml"
 

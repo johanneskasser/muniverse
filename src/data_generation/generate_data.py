@@ -16,6 +16,7 @@ def generate_dataset(config_path):
     Args:
         config_path (str): Path to the YAML configuration file containing:
             - engine: "docker" or "singularity"
+            - container_name: name (docker) or path (singularity) to the container image
             - sim_script: Path to the data generation script
             - output_dir: Output directory for the generated data
             - input_config: Path to the input configuration for run_neuromotion.py

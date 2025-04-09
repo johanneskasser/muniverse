@@ -42,8 +42,14 @@ ENV/
 # Logs
 *.log
 
-# Data
+# Data folder
 data/
 
 # Singularity image files
 *.sif
+
+# Data files 
+*.hdf5
+*.edf
+*.npy
+*.pkl
