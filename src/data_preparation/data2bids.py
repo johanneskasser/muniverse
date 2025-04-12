@@ -114,12 +114,16 @@ def make_channel_tsv(bids_path, name, data_type, units, **kwargs):
     # Save channel metadata as tsv
     channel_metadata = {**essentials, **other}
     df_meta = pd.DataFrame(data=channel_metadata)
-    df_meta.to_csv(bids_path, sep='\t', index=False, header=True)
+
+    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    name = bids_path['subject'] + '_' + bids_path['task'] + '_' + 'channels'
+
+    df_meta.to_csv(path + name + '.tsv', sep='\t', index=False, header=True)
 
     return()
 
 def make_electrode_tsv(bids_path, name, x, y, coordinate_system, **kwargs):
-    # Make *_channels.tsv file
+    # Make *_electrodes.tsv file
     # 
     # Essentials: 
     #   - name (string) 
@@ -135,7 +139,11 @@ def make_electrode_tsv(bids_path, name, x, y, coordinate_system, **kwargs):
     # Save channel metadata as tsv
     el_metadata = {**essentials, **other}
     df_meta = pd.DataFrame(data=el_metadata)
-    df_meta.to_csv(bids_path, sep='\t', index=False, header=True)
+
+    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    name = bids_path['subject'] + '_' + bids_path['task'] + '_' + 'electrodes'
+
+    df_meta.to_csv(path + name + '.tsv', sep='\t', index=False, header=True)
 
     return()
 
@@ -164,7 +172,10 @@ def make_emg_json(bids_path, EMGPlacemnetScheme, EMGReference,
 
     metadata = {**essentials, **other}
 
-    with open(bids_path, 'w') as f:
+    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    name = bids_path['subject'] + '_' + bids_path['task'] + '_' + bids_path['datatype']
+
+    with open(path + name + '.json', 'w') as f:
         json.dump(metadata, f)
     return()
 
@@ -187,20 +198,22 @@ def make_participant_tsv(bids_path, subject_metadata):
     #   - hand (string or "n/a") 
     #   - weight (string or "n/a") 
     #   - height (string or "n/a")
+
+    filename = bids_path['root'] + '/' + 'participants.tsv'
      
-    if os.path.isfile(bids_path):
-        df1 = pd.read_table(bids_path)
+    if os.path.isfile(filename):
+        df1 = pd.read_table(filename)
         df2 = pd.DataFrame(data=subject_metadata)
         frames = [df1, df2]
         df = pd.concat(frames)
-        df.to_csv(bids_path, sep='\t', index=False, header=True)
+        df.to_csv(filename, sep='\t', index=False, header=True)
     else:
         df = pd.DataFrame(data=subject_metadata)
-        df.to_csv(bids_path, sep='\t', index=False, header=True)
+        df.to_csv(filename, sep='\t', index=False, header=True)
 
     return()
 
-def make_participant_json(data_type):
+def make_participant_json(bids_path,data_type):
     # Make participants.json file
 
     if data_type == 'simulation':
@@ -221,6 +234,11 @@ def make_participant_json(data_type):
                     'height': {'Description': 'Body height of the participant', 
                             'Unit': 'm'}                
                     }
+        
+        filename = bids_path['root'] + '/' + 'participants.json'
+
+        with open(filename, 'w') as f:
+            json.dump(metadata, f)
     
     return()
 
@@ -244,19 +262,39 @@ def make_dataset_readme():
 
 # Todo: Include CITATION.cff?
 
-def writeEDF(data, metadata, bids_path):
+def writeEDF(data, fsamp, ch_names, bids_path):
+    # basic version, one could add more metadata, e.g., see https://edfio.readthedocs.io/en/stable/examples.html
 
-#     fsamp = int(device_info['SampleFrequency'])
-#     seconds = np.ceil(data.shape[0]/fsamp)
-#     signal = np.zeros([int(seconds*fsamp), data.shape[1]])
-#     signal[0:data.shape[0],:] = data
+    # Get duration of the signal in seconds
+    seconds = np.ceil(data.shape[0]/fsamp)
+    # Add zeros to the signal such that the total length is in full seconds
+    signal = np.zeros([int(seconds*fsamp), data.shape[1]])
+    signal[0:data.shape[0],:] = data
 
-#     edf = Edf(
-#     [
-#         EdfSignal(signal, sampling_frequency=fsamp),
-#     ]
-#     )
-#     edf.write(bids_path)
+    edf = Edf([EdfSignal(signal[:,0], sampling_frequency=fsamp, label=ch_names[0])])
+
+    for i in np.arange(1,signal.shape[1]):
+        new_signal = EdfSignal(signal[:,i], sampling_frequency=fsamp, label=ch_names[i])
+        edf.append_signals(new_signal)
+
+    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    name = bids_path['subject'] + '_' + bids_path['task'] + '_' + bids_path['datatype']
+
+    edf.write(path + name + '.edf')
     return()
+
+def make_bids_path(subject, task, datatype, root):
+    # 
+    bids_path_info = {'subject': 'sub' + '-' + str(subject).zfill(2),
+                      'task': 'task-' + task,
+                      'datatype': datatype,
+                      'root': root}
+    
+    # make new folder
+    newpath = root + '/' + bids_path_info['subject'] + '/' + datatype
+    if not os.path.exists(newpath):
+        os.makedirs(newpath)  
+
+    return(bids_path_info)
 
 
