@@ -118,8 +118,30 @@ def make_channel_tsv(bids_path, name, data_type, units, **kwargs):
 
     return()
 
+def make_electrode_tsv(bids_path, name, x, y, coordinate_system, **kwargs):
+    # Make *_channels.tsv file
+    # 
+    # Essentials: 
+    #   - name (string) 
+    #   - x (number)
+    #   - y (number)
+    #   - coordinate_system (string) 
+
+    # Set the essential columns of the _electrodes.tsv file in the correct order
+    essentials = {'name': name, 'x': x, 'y': y, 'coordinate_system': coordinate_system}
+    # Add additional metadata columns to the _electrodes.tsv file
+    other = {k: v for k, v in kwargs.items()}
+        
+    # Save channel metadata as tsv
+    el_metadata = {**essentials, **other}
+    df_meta = pd.DataFrame(data=el_metadata)
+    df_meta.to_csv(bids_path, sep='\t', index=False, header=True)
+
+    return()
+
 def make_emg_json(bids_path, EMGPlacemnetScheme, EMGReference, 
-                  SamplingFrequency, PowerLineFrequency, SoftwareFilters, **kwargs):
+                  SamplingFrequency, PowerLineFrequency, SoftwareFilters, 
+                  TaskName, **kwargs):
     # Make *_emg.json file
     # 
     # Essentials: 
@@ -128,12 +150,14 @@ def make_emg_json(bids_path, EMGPlacemnetScheme, EMGReference,
     #   - SamplingFrequency (number) 
     #   - PowerLineFrequency (number or "n/a"), 
     #   - SoftwareFilters (object of objects or "n/a")
+    #   - TaskName (string)
 
     essentials = {'EMGPlacemnetScheme': EMGPlacemnetScheme, 
                   'EMGReference': EMGReference,
                   'SamplingFrequency': SamplingFrequency,
                   'PowerLineFrequency': PowerLineFrequency,
-                  'SoftwareFilters': SoftwareFilters
+                  'SoftwareFilters': SoftwareFilters,
+                  'TaskName': TaskName
                   }
     
     other = {k: v for k, v in kwargs.items()}
@@ -144,7 +168,39 @@ def make_emg_json(bids_path, EMGPlacemnetScheme, EMGReference,
         json.dump(metadata, f)
     return()
 
-# def writeEDF(data, device_info, bids_path):
+def make_coordinate_system_json():
+    # Make *_coordsystem.json file
+    # 
+    # Essentials: 
+    #   - EMGCoordinateSystem (string) 
+    #   - EMGCoordinateUnits (string)
+
+    return()
+
+def make_participant_tsv():
+    # Make participants.tsv file
+    # 
+    # Essentials: 
+    #   - name (string) 
+    #   - age (number or "n/a")
+    #   - sex (string or "n/a")
+    #   - hand (string or "n/a") 
+    #   - weight (string or "n/a") 
+    #   - height (string or "n/a") 
+
+    return()
+
+def make_participant_json():
+    # Make participants.json file
+    
+    return()
+
+def make_dataset_description():
+    # Make dataset_description.json file
+
+    return()
+
+def writeEDF(data, device_info, bids_path):
 
 #     fsamp = int(device_info['SampleFrequency'])
 #     seconds = np.ceil(data.shape[0]/fsamp)
@@ -157,6 +213,6 @@ def make_emg_json(bids_path, EMGPlacemnetScheme, EMGReference,
 #     ]
 #     )
 #     edf.write(bids_path)
-#     return None
+    return()
 
 
