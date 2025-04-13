@@ -8,7 +8,7 @@ from edfio import *
 #import mne
 #from mne_bids import BIDSPath, write_raw_bids
 
-def openOTB(inputname,ngrid):
+def open_otb(inputname,ngrid):
     # Extract data and metadata from OTB+ File
 
     # 
@@ -98,6 +98,63 @@ def openOTB(inputname,ngrid):
 
     return (data, metadata)
 
+def format_otb_channel_metadata(data,metadata,ngrids):
+    ch_names = ['Ch'+str(i) for i in np.arange(1,data.shape[1]+1)]
+    units = metadata['units']
+    ch_type = []
+    low_cutoff = []
+    high_cutoff = []
+    sampling_frequency = []
+    signal_electrode = []
+    grid_name = []
+    group = []
+    reference = []
+    target_muscle = []
+    interelectrode_distance = []
+    description = []
+
+    # Get channel metadata
+    for i in np.arange(ngrids):    
+        channel_metadata = metadata['adapter_info'][i].findall('.//Channel')
+        for j in np.arange(64):
+            ch_type.append('EMG')
+            low_cutoff.append(int(metadata['adapter_info'][i].attrib['LowPassFilter']))
+            high_cutoff.append(int(metadata['adapter_info'][i].attrib['HighPassFilter']))
+            sampling_frequency.append(int(metadata['device_info']['SampleFrequency']))
+            signal_electrode.append(str(j+1))
+            grid_name.append(channel_metadata[j].attrib['ID'])
+            group.append('Grid'+ str(i+1))
+            reference.append('R1')
+            target_muscle.append(channel_metadata[j].attrib['Muscle'])
+            tmp = channel_metadata[j].attrib['Description']
+            tmp = tmp.split('Array ')[-1]
+            tmp = tmp.split((' i.e.d.'))[0]
+            interelectrode_distance.append(tmp)
+            description.append('Monopolar EMG')
+
+    for i in np.arange(len(metadata['aux_info'])):
+        ch_type.append('MISC')
+        low_cutoff.append('n/a')
+        high_cutoff.append('n/a')
+        sampling_frequency.append(int(metadata['aux_info'][i]['fsample']))
+        signal_electrode.append('n/a')
+        grid_name.append('n/a')
+        group.append('n/a')
+        reference.append('n/a')
+        target_muscle.append('n/a')
+        interelectrode_distance.append('n/a')
+        description.append(metadata['aux_info'][i]['description'])
+
+    ch_metadata = {
+        'name': ch_names, 'type': ch_type, 'unit': units,
+        'description': description, 'sampling_frequency': sampling_frequency,
+        'signal_electrode': signal_electrode, 'reference_electrode': reference,
+        'group': group, 'target_muscle': target_muscle, 'interelectrode_distance': interelectrode_distance,
+        'grid_name': grid_name, 'low_cutoff': low_cutoff, 'high_cutoff': high_cutoff
+    }
+
+    return(ch_metadata)    
+
 def make_channel_tsv(bids_path, channel_metadata):
     # Make *_channels.tsv file
     # 
@@ -114,7 +171,7 @@ def make_channel_tsv(bids_path, channel_metadata):
     if not keys == ['name', 'type', 'unit']:
         raise ValueError('essential keys are missing or incorrectly ordered')
    
-    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    path = bids_path['root'] + '/' +  bids_path['subject'] + '/' + bids_path['datatype'] + '/' 
     name = bids_path['subject'] + '_' + bids_path['task'] + '_' + 'channels'
 
     df = pd.DataFrame(data=channel_metadata)
