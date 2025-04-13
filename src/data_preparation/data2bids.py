@@ -246,12 +246,13 @@ def make_participant_tsv(bids_path, subject_metadata):
      
     if os.path.isfile(filename):
         df1 = pd.read_table(filename)
-        df2 = pd.DataFrame(data=subject_metadata)
+        df2 = pd.DataFrame(data=subject_metadata, index=[0])
         frames = [df1, df2]
         df = pd.concat(frames)
+        df = df.drop_duplicates(subset='name', keep='first')
         df.to_csv(filename, sep='\t', index=False, header=True)
     else:
-        df = pd.DataFrame(data=subject_metadata)
+        df = pd.DataFrame(data=subject_metadata, index=[0])
         df.to_csv(filename, sep='\t', index=False, header=True)
 
     return()
