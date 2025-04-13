@@ -306,7 +306,7 @@ def make_dataset_readme():
 
 # Todo: Include CITATION.cff?
 
-def writeEDF(data, fsamp, ch_names, bids_path):
+def write_edf(data, fsamp, ch_names, bids_path):
     # basic version, one could add more metadata, e.g., see https://edfio.readthedocs.io/en/stable/examples.html
 
     # Get duration of the signal in seconds
@@ -321,7 +321,7 @@ def writeEDF(data, fsamp, ch_names, bids_path):
         new_signal = EdfSignal(signal[:,i], sampling_frequency=fsamp, label=ch_names[i])
         edf.append_signals(new_signal)
 
-    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    path = bids_path['root'] + '/' +  bids_path['subject'] + '/' + bids_path['datatype'] + '/'  
     name = bids_path['subject'] + '_' + bids_path['task'] + '_' + bids_path['datatype']
 
     edf.write(path + name + '.edf')
