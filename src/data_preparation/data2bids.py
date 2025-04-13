@@ -286,21 +286,22 @@ def make_participant_json(bids_path,data_type):
     
     return()
 
-def make_dataset_description_json():
+def make_dataset_description_json(bids_path, metadata):
     # Make dataset_description.json 
     
     # Essentials:
     #   - Name (string)
     #   - BIDS Version (string)
+
+    filename = bids_path['root'] + '/' + 'dataset_description.json'
+
+    with open(filename, 'w') as f:
+        json.dump(metadata, f)
 
     return()
 
 def make_dataset_readme():
-    # Make dataset_description.json 
-    
-    # Essentials:
-    #   - Name (string)
-    #   - BIDS Version (string)
+    # ToDo
 
     return()
 

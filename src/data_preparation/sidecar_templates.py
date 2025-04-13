@@ -14,6 +14,7 @@ def emg_sidecar_template(ID):
         emg_sidecar['EMGReference'] = 'Wet reference band placed above the medial malleolus of the same leg.'
         emg_sidecar['EMGChannelCount'] = 256
         emg_sidecar['EMGElectrodeCount'] = 258
+        emg_sidecar['SkinPreparation'] = 'The skin was shaved, abrased and cleansed with 70 percent ethyl alcohol'
         emg_sidecar['Manufacturer'] = 'OTBioelettronica'
         emg_sidecar['ManufacturerModelName'] = 'Quattrocento'
         emg_sidecar['SoftwareVersions'] = 'OTBioLab+ v.1.5.6.0'
@@ -44,3 +45,11 @@ def emg_sidecar_template(ID):
         emg_sidecar['SoftwareFilters'] = 'n/a'
 
     return(emg_sidecar)
+
+def dataset_sidecar_template():
+
+    dataset_sidecar = {}
+    dataset_sidecar['Name'] = 'n/a'
+    dataset_sidecar['BIDSversion'] = 'n/a'
+
+    return(dataset_sidecar)

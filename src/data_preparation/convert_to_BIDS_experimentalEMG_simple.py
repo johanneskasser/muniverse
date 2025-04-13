@@ -1,5 +1,5 @@
 from data2bids import *
-from sidecar_templates import emg_sidecar_template
+from sidecar_templates import emg_sidecar_template, dataset_sidecar_template
 from edfio import *
 import numpy as np
 
@@ -25,6 +25,9 @@ subject['height'] = 'n/a'
 make_participant_tsv(bids_path, subject)
 make_participant_json(bids_path,'exp')
 
-write_edf(data, 2048, ch_metadata['name'], bids_path)
+dataset_metadata = dataset_sidecar_template()
+make_dataset_description_json(bids_path, dataset_metadata)
+
+write_edf(data = data, fsamp = 2048, ch_names = ch_metadata['name'], bids_path = bids_path)
 
 
