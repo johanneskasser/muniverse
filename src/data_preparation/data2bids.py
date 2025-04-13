@@ -191,7 +191,7 @@ def make_electrode_tsv(bids_path, el_metadata):
 
     # ToDo: Add check routines
 
-    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    path = bids_path['root'] + '/' +  bids_path['subject'] + '/' + bids_path['datatype'] + '/' 
     name = bids_path['subject'] + '_' + bids_path['task'] + '_' + 'electrodes'
 
     df = pd.DataFrame(data=el_metadata)
@@ -212,7 +212,7 @@ def make_emg_json(bids_path, emg_metadata):
 
     # ToDo: Test if essential keys are defined
 
-    path = bids_path['root'] + '/' + bids_path['datatype'] + '/' 
+    path = bids_path['root'] + '/' +  bids_path['subject'] + '/' + bids_path['datatype'] + '/' 
     name = bids_path['subject'] + '_' + bids_path['task'] + '_' + bids_path['datatype']
 
     with open(path + name + '.json', 'w') as f:
