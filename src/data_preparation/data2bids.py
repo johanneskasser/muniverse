@@ -5,11 +5,19 @@ import xml.etree.ElementTree as ET
 import json
 import pandas as pd
 from edfio import *
-#import mne
-#from mne_bids import BIDSPath, write_raw_bids
 
 def open_otb(inputname,ngrid):
-    # Extract data and metadata from OTB+ File
+    """
+    Reads otb+ files and outputs stored data and metadata
+
+    Args:
+        inputname (str): name and location of the inputfile /path/name.otb+
+        ngrid (int): number of emg arrays used in the measurement
+
+    Returns:
+        data (ndarray): array of recorded data (samples x channels)
+        metadata (dict): metadata of the recording
+    """
 
     # 
     filename = inputname.split('/')[-1]
@@ -99,6 +107,18 @@ def open_otb(inputname,ngrid):
     return (data, metadata)
 
 def format_otb_channel_metadata(data,metadata,ngrids):
+    """
+    Extract channel metadata given the output of the open_otb function
+
+    Args:
+        data (ndarray): array of recorded data (samples x channels)
+        metadata (dict): metadata of the recording
+
+    Returns:
+        ch_metadata (dict): metadata associated with the individual channels
+    """
+
+    # Initalize lists for each metadata field 
     ch_names = ['Ch'+str(i) for i in np.arange(1,data.shape[1]+1)]
     units = metadata['units']
     ch_type = []
@@ -113,7 +133,7 @@ def format_otb_channel_metadata(data,metadata,ngrids):
     interelectrode_distance = []
     description = []
 
-    # Get channel metadata
+    # Loop over all EMG channels
     for i in np.arange(ngrids):    
         channel_metadata = metadata['adapter_info'][i].findall('.//Channel')
         for j in np.arange(64):
@@ -132,6 +152,7 @@ def format_otb_channel_metadata(data,metadata,ngrids):
             interelectrode_distance.append(tmp)
             description.append('Monopolar EMG')
 
+    # Loop over non-EMG channels
     for i in np.arange(len(metadata['aux_info'])):
         ch_type.append('MISC')
         low_cutoff.append('n/a')
@@ -145,6 +166,7 @@ def format_otb_channel_metadata(data,metadata,ngrids):
         interelectrode_distance.append('n/a')
         description.append(metadata['aux_info'][i]['description'])
 
+    # Output the channel metadata as dictonary
     ch_metadata = {
         'name': ch_names, 'type': ch_type, 'unit': units,
         'description': description, 'sampling_frequency': sampling_frequency,
@@ -155,47 +177,70 @@ def format_otb_channel_metadata(data,metadata,ngrids):
 
     return(ch_metadata)    
 
-
-
 def make_channel_tsv(bids_path, channel_metadata):
-    # Make *_channels.tsv file
-    # 
-    # channel_metadata (dict) needs to contain the  
-    # followinh essential keys in correct order:
-    #   [0] name (string) 
-    #   [1] type (string)
-    #   [2] units (string) 
+    """
+    Generate a BIDS compatible *_channels.tsv file
 
+    Args:
+        bids_path (dict): filename and filepath information
+        channel_metadata (dict): Channel metadata with essential keys
+            - name (string)
+            - type (string)
+            - units (string)
+
+    """
+    # Check if the datatype is correctly specified
     if not isinstance(channel_metadata, dict):
         raise ValueError('channel_metadata is not class <dict>')
 
+    # Check if the essential keywords are present (ordering matters)
     keys = list(channel_metadata.keys())[0:3]    
     if not keys == ['name', 'type', 'unit']:
         raise ValueError('essential keys are missing or incorrectly ordered')
    
+    # Generate path and filename
     path = bids_path['root'] + '/' +  bids_path['subject'] + '/' + bids_path['datatype'] + '/' 
     name = bids_path['subject'] + '_' + bids_path['task'] + '_' + 'channels'
 
+    # Convert metadata into a pandas data frame and save tsv-file
     df = pd.DataFrame(data=channel_metadata)
     df.to_csv(path + name + '.tsv', sep='\t', index=False, header=True)
 
     return()
 
 def make_electrode_tsv(bids_path, el_metadata):
-    # Make *_electrodes.tsv file
-    # 
-    # Essentials (must be correctly ordered): 
-    #   - name (string) 
-    #   - x (number)
-    #   - y (number)
-    #   - z (number) -- if exists
-    #   - coordinate_system (string) 
+    """
+    Generate a a BIDS compatible *_electrodes.tsv file
 
-    # ToDo: Add check routines
+    Args:
+        bids_path (dict): filename and filepath information
+        el_metadata (dict): electrode metadata with essential keys
+            - name (string)
+            - x (float)
+            - y (float)
+            - z (float)
+            - coordinate_system (string)
 
+    """
+    # Check if the datatype is correctly specified
+    if not isinstance(el_metadata, dict):
+        raise ValueError('channel_metadata is not class <dict>')
+
+    # Check if the essential keywords are present (ordering matters)
+    if 'z' in el_metadata:
+        keys = list(el_metadata.keys())[0:5]    
+        if not keys == ['name', 'x', 'y', 'z', 'coordinate_system']:
+            raise ValueError('essential keys are missing or incorrectly ordered')
+    else:    
+        keys = list(el_metadata.keys())[0:4]    
+        if not keys == ['name', 'x', 'y', 'coordinate_system']:
+            raise ValueError('essential keys are missing or incorrectly ordered')
+
+    # Generate path and filename
     path = bids_path['root'] + '/' +  bids_path['subject'] + '/' + bids_path['datatype'] + '/' 
     name = bids_path['subject'] + '_' + bids_path['task'] + '_' + 'electrodes'
 
+    # Convert metadata into a pandas data frame and save tsv-file
     df = pd.DataFrame(data=el_metadata)
     df.to_csv(path + name + '.tsv', sep='\t', index=False, header=True)
 
