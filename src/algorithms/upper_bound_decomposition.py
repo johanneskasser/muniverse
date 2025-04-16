@@ -20,7 +20,7 @@ def get_upper_bound(SIG, MUAPs, fsamp, R = 12, wmethod = 'ZCA'):
     n_mu  = MUAPs.shape[0]
     ipts  = np.zeros((n_mu,SIG.shape[1]))
 
-    # Step 1.1: Filter the data
+    # Step 1.1: Filter the data -- Take care if that is done also the MUAPs need to filtered accordingly
     if False:
         SIG = bandpass_signals(SIG, fsamp)
         SIG = notch_signals(SIG, fsamp)
@@ -50,14 +50,12 @@ def muap_to_filter(MUAP, Z, R):
     that has the highest norm.
 
     Parameters:
-        SIG (ndarray): Input (EMG) signal (n_channels x n_samples)
-        MUAPs (ndarray): MUAPs (mu_index x n_channels x duration)
-        fsamp (float): Sampling rate of the data (unit: Hz)
+        MUAP (ndarray): Multichannel MUAP (n_channels x duration)
+        Z (ndarray): Whitening matrix
         R (int): Extension factor
-        wmethod (str): Whitening type 
 
     Returns:
-        ipts (ndarray): Estimated spike responses (n_mu x n_samples)
+        w (ndarray): Normalized motor unit filter
     """
 
     # Extend the MUAP
