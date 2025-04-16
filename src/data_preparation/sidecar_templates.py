@@ -69,6 +69,19 @@ def dataset_sidecar_template(ID):
                                        'Tianyi Yu', 'Andrew T. M. Phillips', 'Luca Modenese',
                                        'Dario Farina']}
         dataset_sidecar['EthicsApprovals'] = 'The Ethics Committee at Imperial College London reviewed and approved all procedures and protocols (no. 18IC4685)'
+        dataset_sidecar['Funding'] = [
+            'European Research Council Synergy Grant NaturalBionicS (Contract #810346)',
+            'Engineering and Physical Sciences Research Council (EPSRC) Transformative Healthcare', 
+            'Non-Invasive Single Neuron Electrical Monitoring (NISNEM Technology) Grant EP/T020970',
+            'Biotechnology and Biological Sciences Research Council (BBSRC) “Neural Commands for Fast Movements in the Primate Motor System” Grant NU-003743'
+        ]
+        dataset_sidecar['ReferencesAndLinks'] = [
+            '''Caillet, A. H., Avrillon, S., Kundu, A., Yu, T., Phillips, A. T. M., Modenese, L., & Farina, D. (2023). 
+            Larger and Denser: An Optimal Design for Surface Grids of EMG Electrodes to Identify Greater and 
+            More Representative Samples of Motor Units. eNeuro, 10(9), ENEURO.0064-23.2023.''',
+            'https://doi.org/10.1523/ENEURO.0064-23.2023',
+            'https://doi.org/10.6084/m9.figshare.22149287'
+        ]
     else:     
         dataset_sidecar['Name'] = 'n/a'
         dataset_sidecar['BIDSversion'] = 'n/a'

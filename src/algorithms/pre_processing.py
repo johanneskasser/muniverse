@@ -42,60 +42,57 @@ def notch_signals(emg_data, fsamp, nfreq = 50, dfreq = 1, order = 2):
 
     return emg_data
 
-def extension(SIG, R):
+def extension(Y, R):
     """
     Extend a multi-channel signal Y by an extension factor R
-    using Toeplitz matrices and subtract the mean from each extended channel.
+    using Toeplitz matrices.
 
     Parameters:
-        SIG (ndarray): Original signal (n_channels x n_samples)
+        Y (ndarray): Original signal (n_channels x n_samples)
         R (int): Extension factor (number of lags)
 
     Returns:
-        eSIG (ndarray): Extended signal (n_channels * R x n_samples), zero-mean per row
+        eY (ndarray): Extended signal (n_channels * R x n_samples)
     """
-    n_channels, n_samples = SIG.shape
-    eSIG = np.zeros((n_channels * R, n_samples))
+    n_channels, n_samples = Y.shape
+    eY = np.zeros((n_channels * R, n_samples))
 
     for i in range(n_channels):
-        col = np.concatenate(([SIG[i, 0]], np.zeros(R - 1)))
-        row = SIG[i, :]
+        col = np.concatenate(([Y[i, 0]], np.zeros(R - 1)))
+        row = Y[i, :]
         T = toeplitz(col, row)
-        eSIG[i * R:(i + 1) * R, :] = T
+        eY[i * R:(i + 1) * R, :] = T
 
-    # Subtract mean from each extended row (channel)
-    eSIG -= np.mean(eSIG, axis=1, keepdims=True)
+    return eY
 
-    return eSIG
-
-def whitening(eSIG, method='ZCA', backend='eig', regularization='auto', eps=1e-10):
+def whitening(Y, method='ZCA', backend='eig', regularization='auto', eps=1e-10):
     """
     Adaptive whitening function using ZCA, PCA, or Cholesky.
 
     Parameters:
-        eSIG (ndarray): Input signal (n_channels x n_samples)
+        Y (ndarray): Input signal (n_channels x n_samples)
         method (str): Whitening method: 'ZCA', 'PCA', 'Cholesky'
         backend (str): 'eig', or 'svd'
         regularization (str or float): 'auto', float value, or None
         eps (float): Small epsilon for numerical stability
 
     Returns:
-        wSIG (ndarray): Whitened signal
-        whitening_matrix (ndarray): Whitening matrix
+        wY (ndarray): Whitened signal
+        Z (ndarray): Whitening matrix
     """
-    n_channels, n_samples = eSIG.shape
+    n_channels, n_samples = Y.shape
     use_svd = backend == 'svd'
 
     if method == 'Cholesky':
-        covariance = eSIG @ eSIG.T / n_samples
+        covariance = Y @ Y.T / n_samples
         R = np.linalg.cholesky(covariance)
-        whitening_matrix = np.linalg.inv(R.T)
-        wSIG = whitening_matrix @ eSIG
-        return wSIG, whitening_matrix
+        Z = np.linalg.inv(R.T)
+        wY = Z @ Y
+        return wY, Z
 
     # Use SVD
     if use_svd:
-        U, S, Vt = np.linalg.svd(eSIG, full_matrices=False)
+        U, S, Vt = np.linalg.svd(Y, full_matrices=False)
         if regularization == 'auto':
             reg = np.mean(S[len(S)//2:]**2)
         elif isinstance(regularization, float):
@@ -105,16 +102,16 @@ def whitening(eSIG, method='ZCA', backend='eig', regularization='auto', eps=1e-1
         S_inv = 1. / np.sqrt(S**2 + reg + eps)
 
         if method == 'ZCA':
-            whitening_matrix = U @ np.diag(S_inv) @ U.T
+            Z = U @ np.diag(S_inv) @ U.T
         elif method == 'PCA':
-            whitening_matrix = np.diag(S_inv) @ U.T
+            Z = np.diag(S_inv) @ U.T
         else:
             raise ValueError("Unknown method.")
-        wSIG = whitening_matrix @ eSIG
+        wY = Z @ Y
 
     # Use EIG
     else:
-        covariance = eSIG @ eSIG.T / n_samples
+        covariance = Y @ Y.T / n_samples
         S, V = np.linalg.eigh(covariance)
 
         if regularization == 'auto':
@@ -126,11 +123,11 @@ def whitening(eSIG, method='ZCA', backend='eig', regularization='auto', eps=1e-1
         S_inv = 1. / np.sqrt(S + reg + eps)
 
         if method == 'ZCA':
-            whitening_matrix = V @ np.diag(S_inv) @ V.T
+            Z = V @ np.diag(S_inv) @ V.T
         elif method == 'PCA':
-            whitening_matrix = np.diag(S_inv) @ V.T
+            Z = np.diag(S_inv) @ V.T
         else:
             raise ValueError("Unknown method.")
-        wSIG = whitening_matrix @ eSIG
+        wY = Z @ Y
 
-    return wSIG, whitening_matrix
+    return wY, Z
