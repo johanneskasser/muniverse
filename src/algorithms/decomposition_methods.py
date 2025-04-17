@@ -95,11 +95,13 @@ class basic_cBSS:
         self.whitening_method = 'ZCA'
         self.whitening_reg  = 'auto'
         self.n_iter = 50
-        self.obj_function = 'skew'
-        self.max_iter = 100
-        self.deflation = 'deflation'
+        self.opt_function_exp = 3
+        self.opt_max_iter = 100
+        self.opt_tol = 1e-4
+        self.source_deflation = 'gram-schmidt'
         self.peel_off = 'false'
         self.cluster_method  = 'kmeans'
+        self.random_seed = 1909
 
     def set_param(self, **kwargs):
         for key, value in kwargs.items():
@@ -123,6 +125,8 @@ class basic_cBSS:
             mu_filters (ndarray): Optimized motor unit filters
         """
 
+        # Initalize random number generator
+        rng = np.random.seed(self.random_seed)
 
         # Extend signals and subtract the mean and cut the edges
         ext_sig = extension(sig,self.ext_fact)
@@ -143,78 +147,66 @@ class basic_cBSS:
 
         # Loop over each MU
         for i in np.arange(self.n_iter):
-            # Get the optimal MU filter
+            # Randomly initalize the MU filter
             w = np.random.randn(white_sig.shape[0])
+            # fastICA fixedpoint optimization
             w, k = self.my_fixed_point_alg(w, white_sig, B)
-            # Estimate source
+            # Predict source and estimate the source quality
             sources[i,:] = w.T @ white_sig
-            spikes[i], sil[i] = est_spike_times(ipts[i,:], fsamp, cluster=self.cluster_method)
+            spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
             B[:,i] = w
 
         return sources, spikes, sil
 
 
-def my_fixed_point_alg(self, w, X, B):
-    """
-    Fixed-point optimization to maximize sparseness of a source signal.
+    def my_fixed_point_alg(self, w, X, B):
+        """
+        Fixed-point optimization to maximize sparseness of a source signal.
 
-    Parameters:
-        w (np.ndarray): Initial weight vector (n_channels,)
-        X (np.ndarray): Whitened signal matrix (n_channels x n_samples)
-        B (np.ndarray): Current separation matrix (n_components x n_channels)
+        Parameters:
+            w (np.ndarray): Initial weight vector (n_channels,)
+            X (np.ndarray): Whitened signal matrix (n_channels x n_samples)
+            B (np.ndarray): Current separation matrix (n_components x n_channels)
 
-    Returns:
-        w (np.ndarray): Optimized weight vector
-        k (int): Number of iterations taken
-    """
+        Returns:
+            w (np.ndarray): Optimized weight vector
+            k (int): Number of iterations taken
+        """
 
-    def gram_schmidt(v, B):
-        """Project v orthogonally to all vectors in B."""
-        for b in B:
-            v = v - np.dot(v, b) * b
-        return v
 
-    # Define contrast function and its derivative
-    if self.obj_function == 'skew':
-        g = lambda x: x**2
-        gp = lambda x: 2 * x
-    elif self.obj_function == 'kurtosis':
-        g = lambda x: x**3
-        gp = lambda x: 3 * x**2
-    elif self.obj_function == 'logcosh':
-        g = lambda x: np.log(np.cosh(x))
-        gp = lambda x: np.tanh(x)
-    else:
-        raise ValueError(f"Unknown contrast function: {self.obj_function}")
+        # Define contrast function and its derivative
+        # Use g(x)=x*(x**2+epsilon)**((a-1)/2) as smooth approximation of g(x) = sign(x) * abs(x)**a
+        epsilon = 1e-3
+        a = self.opt_function_exp
+        g = lambda x: (epsilon+x**2)**(a-3/2) * (2*a*x**2 + epsilon)
+        gp = lambda x: (2*a-1)*x * (epsilon+x**2)**(a-5/2) * (2*a*x**2 + 3*epsilon)
 
-    TOL = 1e-4
-    delta = np.ones(self.maxiter)
-    k = 0
+        TOL = self.opt_tol
+        delta = np.ones(self.opt_max_iter)
+        k = 0
 
-    while delta[k] > TOL and k < self.maxiter - 1:
-        w_last = w.copy()
+        while delta[k] > TOL and k < self.opt_max_iter - 1:
+            w_last = w.copy()
 
-        wTX = w.T @ X  # shape: (n_samples,)
-        A = np.mean(gp(wTX))
-        w = np.mean(X * g(wTX), axis=1) - A * w  # shape: (n_channels,)
+            wTX = w.T @ X  # shape: (n_samples,)
+            A = np.mean(gp(wTX))
+            w = np.mean(X * g(wTX), axis=1) - A * w  # shape: (n_channels,)
 
-        # Orthogonalization step
-        if self.deflation == 'deflation':
-            w = w - (B @ B.T) @ w
-        elif self.deflation == 'gram-schmid':
-            w = gram_schmidt(w, B)
-        elif self.deflation == 'none':
-            pass
-        else:
-            raise ValueError(f"Unknown orthogonalization: {self.deflation}")
+            # Orthogonalization step
+            if self.source_deflation == 'projection_deflation':
+                w = w - (B @ B.T) @ w
+            elif self.source_deflation == 'gram-schmidt':
+                w = gram_schmidt(w, B)
+            else:
+                pass            
 
-        # Normalize
-        w = w / np.linalg.norm(w)
+            # Normalize
+            w = w / np.linalg.norm(w)
 
-        # Convergence criterion
-        delta[k + 1] = abs(np.dot(w, w_last) - 1)
-        k += 1
+            # Convergence criterion
+            delta[k + 1] = abs(np.dot(w, w_last) - 1)
+            k += 1
 
-    return w, k    
+        return w, k    
     
 

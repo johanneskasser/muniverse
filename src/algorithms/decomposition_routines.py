@@ -144,3 +144,29 @@ def est_spike_times(sig, fsamp, cluster = 'kmeans', a = 2):
         sil = (between - sumd) / denom if denom > 0 else 0.0
 
     return est_spikes, sil
+
+def gram_schmidt(w, B):
+    """
+    Stabilized Gram-Schmidt orthogonalization.
+
+    Parameters:
+        w (np.ndarray): Input vector to be orthogonalized (shape: [n,])
+        B (np.ndarray): Matrix of orthogonal basis vectors in columns (shape: [n, k])
+
+    Returns:
+        u (np.ndarray): Orthogonalized vector
+    """
+    w = np.asarray(w, dtype=float)
+    B = np.asarray(B, dtype=float)
+
+    # Remove zero columns from B
+    non_zero_cols = ~np.all(B == 0, axis=0)
+    B = B[:, non_zero_cols]
+
+    u = w.copy()
+    for i in range(B.shape[1]):
+        a = B[:, i]
+        projection = (np.dot(u, a) / np.dot(a, a)) * a
+        u = u - projection
+
+    return u
