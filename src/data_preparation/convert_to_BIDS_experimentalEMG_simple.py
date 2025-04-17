@@ -1,10 +1,12 @@
-from data2bids import *
+from data2bids import emg_bids_generator
+from otb_io import open_otb, format_otb_channel_metadata
 from sidecar_templates import emg_sidecar_template, dataset_sidecar_template
 from edfio import *
 import numpy as np
 
 # Define path and name of the BIDS structure
-bids_path = make_bids_path(subject=1, task='isometric-30-percent-mvc', datatype='emg', root='./data')
+#bids_path = make_bids_path(subject=1, task='isometric-30-percent-mvc', datatype='emg', root='./data')
+bids_gen = emg_bids_generator(subject=1, task='isometric-30-percent-mvc', datatype='emg', root='./data')
 
 # Import daata from otb+ file
 ngrids = 4
@@ -12,7 +14,7 @@ ngrids = 4
 
 # Get and write channel metadata
 ch_metadata = format_otb_channel_metadata(data,metadata,ngrids)
-make_channel_tsv(bids_path,ch_metadata)
+bids_gen.make_channel_tsv(ch_metadata)
 
 # Helper function for getting electrode coordinates
 def get_grid_coordinates(grid_name):
@@ -57,18 +59,18 @@ y.append('n/a')
 coordinate_system.append('n/a') 
 coordinate_system.append('n/a')        
 el_metadata = {'name': name, 'x': x, 'y': y, 'coordinate_system': coordinate_system}
-make_electrode_tsv(bids_path, el_metadata)        
+bids_gen.make_electrode_tsv(el_metadata)        
 
 # Make the coordinate system sidecar file (here just a placeholder)
 coordsystem_metadata = {'EMGCoordinateSystem': 'local', 'EMGCoordinateUnits': 'mm'}
-make_coordinate_system_json(bids_path, coordsystem_metadata)
+bids_gen.make_coordinate_system_json(coordsystem_metadata)
 
 # Make the emg sidecar file
 emg_sidecar = emg_sidecar_template('Caillet2023')
-make_emg_json(bids_path,emg_sidecar)
+bids_gen.make_emg_json(emg_sidecar)
 
 # Make subject sidecar file 
-make_participant_json(bids_path,'exp')
+bids_gen.make_participant_json('exp')
 
 # Save individual subject file
 subject = {}
@@ -78,11 +80,11 @@ subject['sex'] = 'M'
 subject['hand'] = 'n/a'
 subject['weight'] = 'n/a'
 subject['height'] = 'n/a'
-make_participant_tsv(bids_path, subject)
+bids_gen.make_participant_tsv(subject)
 
 # Make dataset sidecar file
 dataset_metadata = dataset_sidecar_template('n/a')
-make_dataset_description_json(bids_path, dataset_metadata)
+bids_gen.make_dataset_description_json(dataset_metadata)
 
 # Convert the raw data to an .edf file
 write_edf(data = data, fsamp = 2048, ch_names = ch_metadata['name'], bids_path = bids_path)
