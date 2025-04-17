@@ -102,6 +102,9 @@ class basic_cBSS:
         self.peel_off = 'false'
         self.cluster_method  = 'kmeans'
         self.random_seed = 1909
+        self.refine_w = False
+        self.sil_th = 0.9
+        self.cov_th = 0.35
 
     def set_param(self, **kwargs):
         for key, value in kwargs.items():
@@ -150,11 +153,23 @@ class basic_cBSS:
             # Randomly initalize the MU filter
             w = np.random.randn(white_sig.shape[0])
             # fastICA fixedpoint optimization
-            w, k = self.my_fixed_point_alg(w, white_sig, B)
+            w, _ = self.my_fixed_point_alg(w, white_sig, B)
             # Predict source and estimate the source quality
             sources[i,:] = w.T @ white_sig
             spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
+            cov     = 100
+            # Refinement loop
+            if len(spikes[i]) > 10 and self.refine_w:
+                w, _, cov = self.mimimize_covisi(w,white_sig, cov, fsamp)
+                sources[i,:] = w.T @ white_sig
+                spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
+
             B[:,i] = w
+
+            if self.peel_off and sil[i] > self.sil_th and cov < self.cov_th:
+                # Not implemented yet
+                pass    
+            
 
         return sources, spikes, sil
 
@@ -208,5 +223,20 @@ class basic_cBSS:
             k += 1
 
         return w, k    
+    
+    def mimimize_covisi(self, w, X,  cov, fsamp):
+
+        cov_last = cov
+
+        while cov < cov_last:
+            source = w.T @ X
+            spikes, _ = est_spike_times(source, fsamp)
+            cov_last = cov
+            isi      = np.diff(spikes/fsamp)
+            cov  = np.std(isi) / np.mean(isi)
+            w = np.mean(X[:,spikes],axis=1) 
+            w = w / np.linalg.norm(w)
+         
+        return w, spikes, cov
     
 
