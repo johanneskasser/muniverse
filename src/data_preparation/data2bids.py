@@ -6,7 +6,13 @@ from edfio import *
 
 class emg_bids_generator:
 
-    def __init__(self, subject, task, datatype, root, session = -1, n_digits=2):
+    def __init__(self, 
+                 subject=1, 
+                 task = 'isometric', 
+                 datatype = 'emg', 
+                 root = './my_bids_project', 
+                 session = -1, 
+                 n_digits=2):
       
         # Check if the function arguments are valid
         if type(subject) is not int or subject > 10**n_digits-1:
@@ -33,7 +39,6 @@ class emg_bids_generator:
         self.subject_id = sub_name
         self.datatype = datatype
         self.data = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
-        self.fsamp = 1
         self.channels = pd.DataFrame(columns=['name', 'type', 'unit'])
         self.electrodes = pd.DataFrame(columns=['name','x','y','z', 'coordinate_system'])
         self.subject = pd.DataFrame(columns=['name', 'age', 'sex', 'hand', 'weight', 'height'])
@@ -122,8 +127,7 @@ class emg_bids_generator:
                 self.dataset_sidecar = json.load(f) 
         # read edf file
         name = self.datapath + self.subject_id + '_' + self.task + '_' + self.datatype + '.edf'
-        self.data = read_edf(name)
-        self.fsamp = self.data.signals[0].sampling_frequency        
+        self.data = read_edf(name)      
               
         return()  
                       
@@ -337,7 +341,6 @@ class emg_bids_generator:
             edf.append_signals(new_signal)
 
         self.data = edf
-        self.fsamp = fsamp
 
         return()
     
