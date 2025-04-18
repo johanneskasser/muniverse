@@ -4,7 +4,7 @@ import json
 import pandas as pd
 from edfio import *
 
-class emg_bids_generator:
+class emg_bids_io:
 
     def __init__(self, 
                  subject=1, 
@@ -217,7 +217,9 @@ class emg_bids_generator:
         elif type(new_metadata) == str and os.path.isfile(new_metadata):
             with open(new_metadata, 'r') as f:
                 tmp = json.load(f)
-            self.emg_sidecar.update(tmp)    
+            self.emg_sidecar.update(tmp)
+        else:
+            raise ValueError('input has incorrect datatype')    
 
         return()
 
@@ -239,7 +241,9 @@ class emg_bids_generator:
         elif type(new_metadata) == str and os.path.isfile(new_metadata):
             with open(new_metadata, 'r') as f:
                 tmp = json.load(f)
-            self.coord_sidecar.update(tmp)  
+            self.coord_sidecar.update(tmp)
+        else:
+            raise ValueError('input has incorrect datatype')      
 
         return()
 
@@ -298,18 +302,27 @@ class emg_bids_generator:
         
         return()
 
-    def add_dataset_sidecar_metadata(self, metadata):
+    def add_dataset_sidecar_metadata(self, new_metadata):
         """
         Add metadata to dataset_sidecar 
 
         Args:
-            metadata (dict): metadata with essential keys
+            new_metadata (dict or path): metadata
+
+            List of essential keys
                 - Name (str) 
                 - BIDSversion (str)
 
         """
 
-        self.dataset_sidecar.update(metadata)
+        if type(new_metadata) == dict:
+            self.dataset_sidecar.update(new_metadata)
+        elif type(new_metadata) == str and os.path.isfile(new_metadata):
+            with open(new_metadata, 'r') as f:
+                tmp = json.load(f)
+            self.dataset_sidecar.update(tmp)
+        else:
+            raise ValueError('input has incorrect datatype')
 
         return()
 
@@ -337,7 +350,7 @@ class emg_bids_generator:
         edf = Edf([EdfSignal(signal[:,0], sampling_frequency=fsamp)])
 
         for i in np.arange(1,signal.shape[1]):
-            new_signal = EdfSignal(signal[:,i], sampling_frequency=self.fsamp)
+            new_signal = EdfSignal(signal[:,i], sampling_frequency=fsamp)
             edf.append_signals(new_signal)
 
         self.data = edf
@@ -353,7 +366,7 @@ class emg_bids_generator:
 
         """
 
-        data_out = np.zeros((self.data.signals[idx[0]].data.shape[0], self.data.num_signals))
+        data_out = np.zeros((self.data.signals[idx[0]].data.shape[0], len(idx)))
         for i in np.arange(len(idx)):
             data_out[:,i] = self.data.signals[idx[i]].data
 
