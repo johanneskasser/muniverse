@@ -3,6 +3,7 @@ import os
 import json
 import pandas as pd
 from edfio import *
+import h5py
 
 class emg_bids_io:
 
@@ -17,10 +18,10 @@ class emg_bids_io:
       
         # Check if the function arguments are valid
         if type(subject) is not int or subject > 10**n_digits-1:
-            raise ValueError('invlaid subject ID')
+            raise ValueError('invalid subject ID')
         
         if type(session) is not int or session > 10**n_digits-1:
-            raise ValueError('invlaid session ID')
+            raise ValueError('invalid session ID')
         
         if datatype not in ['emg']:
             raise ValueError('datatype must be emg')
@@ -134,7 +135,6 @@ class emg_bids_io:
               
         return()  
                       
-
     def add_channel_metadata(self, new_metadata):
         """
         Add channel metadata
@@ -374,6 +374,204 @@ class emg_bids_io:
             data_out[:,i] = self.data.signals[idx[i]].data
 
         return(data_out)  
+
+
+class simulated_emg_bids_io(emg_bids_io):
+    def __init__(self, config_path, hdf5_path, root='./data', datasetname='simulated-dataset'):
+        # Parse config file first
+        self.config = self._parse_config(config_path)
+        self.hdf5_path = hdf5_path
+        
+        # Initialize the parent class with BIDS-compatible parameters
+        subject_id = self._generate_subject_id()
+        task_name = self._generate_task_name()
+        
+        super().__init__(
+            subject=subject_id,
+            task=task_name,
+            datatype='emg',
+            datasetname=datasetname,
+            root=root
+        )
+        
+        # Initialize additional data structures for simulated data
+        self.spikes = pd.DataFrame(columns=['source_id', 'spike_time'])
+        self.motor_units = pd.DataFrame(columns=['unit_id', 'recruitment_threshold', 'depth', 'innervation_zone', 
+                                               'fibre_density', 'fibre_length', 'conduction_velocity', 'angle'])
+        self.internals = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        # self.spikes_sidecar = {'source_id': [], 'spike_time': []}
+        # self.motor_units_sidecar = {'unit_id': [], 'recruitment_threshold': [], 'depth': [], 'innervation_zone': [], 'fibre_density': [], 'fibre_length': [], 'conduction_velocity': [], 'angle':[]}
+        self.internals_sidecar = {'SamplingFrequency': [], 'Description': 'Simulated internal variables'}
+        
+    def _parse_config(self, config_path):
+        with open(config_path, 'r') as f:
+            return json.load(f)
+            
+    def _generate_subject_id(self):
+        return f"sim{self.config['SubjectConfiguration']['SubjectSeed']}"
+        
+    def _generate_task_name(self):
+        # Generate a BIDS-compatible task name
+        movement = self.config['MovementConfiguration']
+        profile = movement['MovementProfileParameters']
+        muscle = movement['TargetMuscle']
+        movement_type = movement['MovementType']
+        effort_level = profile['EffortLevel']
+        if movement_type == 'Isometric':
+            effort_profile = profile['EffortProfile']
+        else:
+            effort_profile = profile['AngleProfile']
+        
+        # Example: "FDSIisometrictrapezoid10pct"
+        return f"{muscle.upper()}{movement_type.lower()}{effort_profile.lower()}{effort_level}pct"
+        
+    def _setup_electrode_metadata(self):
+        # Generate electrode metadata based on RecordingConfiguration
+        elec_config = self.config['RecordingConfiguration']['ElectrodeConfiguration']
+        
+        # Generate electrode names and positions: TO-DO
+        names = []
+        x_pos = []
+        y_pos = []
+        coordinate_system = []
+        
+        for i in range(elec_config['NElectrodes']):
+            row = i // elec_config['NCols']
+            col = i % elec_config['NCols']
+            
+            names.append(f"E{i+1}")
+            x_pos.append(col * elec_config['InterElectrodeDistance'])
+            y_pos.append(row * elec_config['InterElectrodeDistance'])
+            coordinate_system.append("Grid1")
+            
+        return {
+            'name': names,
+            'x': x_pos,
+            'y': y_pos,
+            'coordinate_system': coordinate_system
+        }
+        
+    def _setup_channel_metadata(self):
+        # Generate channel metadata
+        elec_config = self.config['RecordingConfiguration']['ElectrodeConfiguration']
+        
+        names = []
+        types = []
+        units = []
+        
+        for i in range(elec_config['NElectrodes']):
+            names.append(f"E{i+1}")
+            types.append("EMG")
+            units.append("mV")
+            
+        return {
+            'name': names,
+            'type': types,
+            'unit': units
+        }
+        
+    def _setup_coordsystem_metadata(self):
+        return {
+            'EMGCoordinateSystem': 'local',
+            'EMGCoordinateUnits': 'mm'
+        }
+        
+    def _setup_spikes_data(self):
+        """Read and format spike times from HDF5 file"""
+        with h5py.File(self.hdf5_path, 'r') as f:
+            spike_times = f['spikes'][:]
+            unit_ids = f['unit_ids'][:]
+            
+        # Convert to long format DataFrame
+        rows = []
+        for unit_id, times in zip(unit_ids, spike_times):
+            for t in times:
+                rows.append({'source_id': unit_id, 'spike_time': t})
+                
+        self.spikes = pd.DataFrame(rows)
+        
+    def _setup_motor_units_data(self):
+        """Read and format motor unit properties from HDF5 file"""
+        with h5py.File(self.hdf5_path, 'r') as f:
+            unit_ids = f['unit_ids'][:]
+            recruitment_thresholds = f['recruitment_thresholds'][:]
+            unit_properties = f['unit_properties'][:]
+
+        # Handle individual properties: TO-DO
+        self.motor_units = pd.DataFrame({
+            'unit_id': unit_ids,
+            'recruitment_threshold': recruitment_thresholds,
+            'depth': unit_properties[:,0],
+            'innervation_zone': unit_properties[:,1],
+            'fibre_density': unit_properties[:,2],
+            'fibre_length': unit_properties[:,3],
+            'conduction_velocity': unit_properties[:,4],
+            'angle': unit_properties[:,5]
+        })
+        
+    def _setup_internals_data(self):
+        """Read and format internal simulation variables from HDF5 file"""
+        with h5py.File(self.hdf5_path, 'r') as f:
+            internals_data = f['_internals'][:]
+            fsamp = self.config['RecordingConfiguration']['SamplingFrequency']
+            
+        # Convert to EDF format
+        edf = Edf([EdfSignal(internals_data[:,0], sampling_frequency=fsamp)])
+        for i in range(1, internals_data.shape[1]):
+            new_signal = EdfSignal(internals_data[:,i], sampling_frequency=fsamp)
+            edf.append_signals(new_signal)
+            
+        self.internals = edf
+        self.internals_sidecar['SamplingFrequency'] = fsamp
+        
+    def _write_simulated_files(self):
+        """Write additional simulated data files"""
+        # Write spikes data
+        spikes_name = os.path.join(self.datapath, f"{self.subject_id}_{self.task}_spikes")
+        self.spikes.to_csv(spikes_name + '.tsv', sep='\t', index=False)
+        
+        # Write motor units data
+        mu_name = os.path.join(self.datapath, f"{self.subject_id}_{self.task}_motorunits")
+        self.motor_units.to_csv(mu_name + '.tsv', sep='\t', index=False)
+        
+        # Write internals data
+        internals_name = os.path.join(self.datapath, f"{self.subject_id}_{self.task}_internals")
+        self.internals.write(internals_name + '.edf')
+        with open(internals_name + '.json', 'w') as f:
+            json.dump(self.internals_sidecar, f)
+            
+    def write(self):
+        """Override write method to include simulated data"""
+        # First set up all the simulated data
+        self._setup_spikes_data()
+        self._setup_motor_units_data()
+        self._setup_internals_data()
+        
+        # Call parent's write method to handle standard BIDS files
+        super().write()
+        
+        # Write additional simulated files
+        self._write_simulated_files()
+        
+    def read(self):
+        """Override read method to include simulated data"""
+        # Call parent's read method first
+        super().read()
+        
+        # Read simulated data files if they exist
+        spikes_name = os.path.join(self.datapath, f"{self.subject_id}_{self.task}_spikes.tsv")
+        if os.path.isfile(spikes_name):
+            self.spikes = pd.read_table(spikes_name)
+            
+        mu_name = os.path.join(self.datapath, f"{self.subject_id}_{self.task}_motorunits.tsv")
+        if os.path.isfile(mu_name):
+            self.motor_units = pd.read_table(mu_name)
+            
+        internals_name = os.path.join(self.datapath, f"{self.subject_id}_{self.task}_internals.edf")
+        if os.path.isfile(internals_name):
+            self.internals = read_edf(internals_name)
+            with open(internals_name.replace('.edf', '.json'), 'r') as f:
+                self.internals_sidecar = json.load(f)
 
 
 class decomp_derivatives_bids_io:
