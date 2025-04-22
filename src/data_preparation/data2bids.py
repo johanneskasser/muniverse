@@ -150,7 +150,7 @@ class bids_dataset:
 
         '''
 
-        bids_version = 'extension proposal for electromyography (EMG) - BEP042'
+        bids_version = 'extension proposal for electromyography - BEP042'
 
         return bids_version         
 
@@ -214,7 +214,7 @@ class bids_emg_recording(bids_dataset):
         self.electrodes = pd.DataFrame(columns=['name','x','y','z', 'coordinate_system'])
         self.emg_sidecar = {'EMGPlacementScheme': [], 'EMGReference': [], 'SamplingFrequency': [],
                     'PowerLineFrequency': [], 'SoftwareFilters': [], 'TaskName': []}
-        self.coord_sidecar = {'EMGCoordinateSystem': [], 'EMGCoordinateUnits': []} 
+        self.coord_sidecar = {'EMGCoordinateSystem': [], 'EMGCoordinateUnits': []}
 
     def write(self):
         """
@@ -321,7 +321,7 @@ class bids_emg_recording(bids_dataset):
 
 
 
-class simulated_emg_bids_io(bids_emg_recording):
+class bids_simulated_emg_recording(bids_emg_recording):
     def __init__(self, config_path, hdf5_path, root='./data', datasetname='simulated-dataset'):
         # Parse config file first
         self.config = self._parse_config(config_path)
@@ -686,8 +686,3 @@ def edf_to_numpy(edf_data, idx):
         np_data[:,i] = edf_data.signals[idx[i]].data
 
     return np_data
-
-
-
-
-
