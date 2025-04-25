@@ -1,7 +1,11 @@
 import numpy as np
+import pandas as pd
 from scipy.linalg import toeplitz
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, convolve
 from sklearn.cluster import KMeans
+import sys
+sys.path.append('../evaluation/')
+from evaluate import *
 
 def extension(Y, R):
     """
@@ -170,3 +174,131 @@ def gram_schmidt(w, B):
         u = u - projection
 
     return u
+
+def remove_duplicates(sources, spikes, sil, fsamp, max_shift=0.1, tol=0.001, threshold=0.3, min_num_spikes = 10):
+
+
+    n_source = sources.shape[0]
+    new_labels = np.arange(n_source)
+
+    for i in np.arange(n_source):
+
+        # Check if the source has already been labeled and if it contains enough spikes
+        if new_labels[i] < i:
+            continue
+        elif len(spikes) < min_num_spikes:
+            new_labels[i] = np.nan
+            continue
+
+        # Make binary spike train of source i    
+        st1 = get_bin_spikes(spikes[i], sources.shape[1])
+        
+        for j in np.arange(i+1, n_source):
+            # Make binary spike train of source j
+            st2 = get_bin_spikes(spikes[j], sources.shape[1])
+            # Compute the delay between source i and j
+            corr , shift = max_xcorr(st1, st2, max_shift=int(max_shift*fsamp))
+            # Compute the number of common spikes
+            tp, _, _ = match_spikes(spikes[i], spikes[j], shift=shift, tol=tol*fsamp) 
+            # Calculate the metaching rate and compare with threshold
+            denom = max(len(spikes[i]), len(spikes[j]))
+            match_score = tp / denom if denom > 0 else 0
+
+            if match_score >= threshold:
+                new_labels[j] = i
+
+    # Get the number of unqiue sources and initalize output variables
+    unique_labels = np.unique(new_labels[np.isfinite(new_labels)])
+    new_sources  = np.zeros((len(unique_labels),sources.shape[1]))
+    new_spikes = {i: [] for i in range(len(unique_labels))}
+    new_sil = np.zeros(len(new_labels))
+
+    # 
+    for i in np.arange(len(unique_labels)):
+        idx = (new_labels == unique_labels[i]).astype(int)
+        best_idx = np.argmax(idx * sil)
+        new_sources[i,:] = sources[best_idx,:]
+        new_spikes[i] = spikes[best_idx]
+        new_sil[i] = sil[best_idx]
+
+    return new_sources, new_spikes, new_sil
+
+def spike_triggered_average(sig, spikes, win=0.02, fsamp = 2048):
+    '''
+    Calculate the spike triggered average given the spike times of a source
+
+    Parameters:
+        sig (2D np.array): signal [channels x time]
+        spikes (1D array): Spike indices
+        fsamp (float): Sampling frequency in Hz
+        win (float): Window size in seconds for MUAP template (in seconds)
+
+    Returns:
+        waveform (2D np.array): Estimated impulse response of a given source
+    
+    '''
+
+    width = int(win*fsamp)
+    waveform = np.zeros((sig.shape[0], 2*width+1))
+
+    spikes = spikes[(spikes >= width + 1) & (spikes < sig.shape[1] - width - 1)]
+
+    for i in np.arange(len(spikes)):
+        waveform = waveform + sig[:,(spikes[i]-width):(spikes[i]+width+1)]
+
+    waveform = waveform / len(spikes)    
+
+    return waveform
+
+def peel_off(sig, spikes, win=0.02, fsamp=2048):
+    """
+    Peel off signal component based on spike triggered average.
+
+    Parameters:
+        sig (2D np.array): signal [channels x time]
+        spikes (1D array): Spike indices
+        fsamp (float): Sampling frequency in Hz
+        win (float): Window size in seconds for MUAP template (in seconds)
+
+    Returns:
+        residual_sig (2D np.array): Residual signal after removing component
+        comp_sig (2D np.array): Estimated contribution of the given source
+    """
+
+    waveform = spike_triggered_average(sig,spikes,win,fsamp)
+
+    width = int(win*fsamp)
+    spikes = spikes[(spikes >= width + 1) & (spikes < sig.shape[1] - width - 1)]
+    firings = np.zeros(sig.shape[1])
+    firings[spikes] = 1
+
+    comp_sig = np.zeros_like(sig)
+
+    for i in np.arange(sig.shape[0]):
+        comp_sig[i,:] = convolve(firings, waveform[i,:], 'same') 
+
+    residual_sig = sig - comp_sig
+
+    return residual_sig, comp_sig
+
+
+def spike_dict_to_long_df(spike_dict, sort=True, fsamp = 2048):
+    """
+    Convert a dictionary of spike instances into a long-formatted DataFrame.
+
+    Parameters:
+        spike_dict (dict): Keys are unit IDs, values are lists or arrays of spike times.
+        sort (bool): Whether to sort the result by unit and spike time.
+
+    Returns:
+        pd.DataFrame: Long-formatted DataFrame with columns ['unit_id', 'spike_time']
+    """
+    rows = []
+    for unit_id, spikes in spike_dict.items():
+        for t in spikes:
+            rows.append({"source_id": unit_id, "spike_time": t/fsamp})
+    
+    df = pd.DataFrame(rows)
+    if sort:
+        df = df.sort_values(by=["source_id", "spike_time"]).reset_index(drop=True)
+    return df

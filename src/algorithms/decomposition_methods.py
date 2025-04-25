@@ -1,13 +1,29 @@
 import numpy as np
 from decomposition_routines import *
+import sys
 
 class upper_bound:
 
-    def __init__(self):
+    def __init__(self, config=None, **kwargs):
         self.ext_fact = 12
         self.whitening_method = 'ZCA'
         self.whitening_reg  = 'auto'
         self.cluster_method  = 'kmeans'
+
+        # Convert config object (if provided) to a dictionary
+        config_dict = vars(config) if config is not None else {}
+
+        # Merge with directly passed keyword arguments (overwrites config)
+        params = {**config_dict, **kwargs}
+
+        valid_keys = self.__dict__.keys()
+
+        # Assign all parameters as attributes
+        for key, value in params.items():
+            if key in valid_keys:
+                setattr(self, key, value)
+            else:
+                print(f"Warning: ignoring invalid parameter: {key}")
 
     def set_param(self, **kwargs):
         for key, value in kwargs.items():
@@ -90,11 +106,14 @@ class upper_bound:
 
 class basic_cBSS:
 
-    def __init__(self):
+    def __init__(self, config=None, **kwargs):
+
+        # Default parameters
         self.ext_fact = 12
         self.whitening_method = 'ZCA'
         self.whitening_reg  = 'auto'
-        self.n_iter = 50
+        self.n_iter = 100
+        self.opt_initalization = 'random'
         self.opt_function_exp = 3
         self.opt_max_iter = 100
         self.opt_tol = 1e-4
@@ -102,9 +121,24 @@ class basic_cBSS:
         self.peel_off = 'false'
         self.cluster_method  = 'kmeans'
         self.random_seed = 1909
-        self.refine_w = False
+        self.refinement_loop = False
         self.sil_th = 0.9
         self.cov_th = 0.35
+
+        # Convert config object (if provided) to a dictionary
+        config_dict = vars(config) if config is not None else {}
+
+        # Merge with directly passed keyword arguments (overwrites config)
+        params = {**config_dict, **kwargs}
+
+        valid_keys = self.__dict__.keys()
+
+        # Assign all parameters as attributes
+        for key, value in params.items():
+            if key in valid_keys:
+                setattr(self, key, value)
+            else:
+                print(f"Warning: ignoring invalid parameter: {key}")
 
     def set_param(self, **kwargs):
         for key, value in kwargs.items():
@@ -148,18 +182,34 @@ class basic_cBSS:
         sil = np.zeros(self.n_iter)
         B = np.zeros((white_sig.shape[0], self.n_iter))
 
+        if self.opt_initalization == 'activity_idx':
+            act_idx_histoty = np.zeros(self.n_iter).astype(bool)
+
         # Loop over each MU
         for i in np.arange(self.n_iter):
-            # Randomly initalize the MU filter
-            w = np.random.randn(white_sig.shape[0])
+            # Initalize 
+            if self.opt_initalization == 'random':
+                w = np.random.randn(white_sig.shape[0])
+            elif self.opt_initalization == 'activity_idx':
+                col_norms = np.linalg.norm(white_sig, axis=0)
+                col_norms[act_idx_histoty] = 0
+                best_idx = np.argmax(col_norms)
+                w = white_sig[:, best_idx]
+                act_idx_histoty[i] = best_idx
+            else:
+                ValueError('The specified initalization method is not implemented')
+
             # fastICA fixedpoint optimization
             w, _ = self.my_fixed_point_alg(w, white_sig, B)
+
             # Predict source and estimate the source quality
             sources[i,:] = w.T @ white_sig
             spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
-            cov     = 100
+            isi      = np.diff(spikes[i]/fsamp)
+            cov  = np.std(isi) / np.mean(isi)
+
             # Refinement loop
-            if len(spikes[i]) > 10 and self.refine_w:
+            if len(spikes[i]) > 10 and self.refinement_loop:
                 w, _, cov = self.mimimize_covisi(w,white_sig, cov, fsamp)
                 sources[i,:] = w.T @ white_sig
                 spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
@@ -167,10 +217,11 @@ class basic_cBSS:
             B[:,i] = w
 
             if self.peel_off and sil[i] > self.sil_th and cov < self.cov_th:
-                # Not implemented yet
-                pass    
-            
+                white_sig, _ = peel_off(white_sig, spikes[i], win=0.025, fsamp=fsamp) 
 
+        # Remove duplicates        
+        sources, spikes, sil = remove_duplicates(sources, spikes, sil, fsamp)
+       
         return sources, spikes, sil
 
 
@@ -226,7 +277,7 @@ class basic_cBSS:
     
     def mimimize_covisi(self, w, X,  cov, fsamp):
 
-        cov_last = cov
+        cov_last = cov + 1
 
         while cov < cov_last:
             source = w.T @ X
@@ -238,5 +289,13 @@ class basic_cBSS:
             w = w / np.linalg.norm(w)
          
         return w, spikes, cov
+    
+    def _write_pipeline_sidecar(self):
+        """
+        Write the pipeline metadata into a json file.
+
+        """
+        # ToDo
+        pass
     
 
