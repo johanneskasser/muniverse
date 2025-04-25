@@ -198,13 +198,16 @@ class basic_cBSS:
                 act_idx_histoty[i] = best_idx
             else:
                 ValueError('The specified initalization method is not implemented')
+
             # fastICA fixedpoint optimization
             w, _ = self.my_fixed_point_alg(w, white_sig, B)
+
             # Predict source and estimate the source quality
             sources[i,:] = w.T @ white_sig
             spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
             isi      = np.diff(spikes[i]/fsamp)
             cov  = np.std(isi) / np.mean(isi)
+
             # Refinement loop
             if len(spikes[i]) > 10 and self.refinement_loop:
                 w, _, cov = self.mimimize_covisi(w,white_sig, cov, fsamp)
@@ -216,7 +219,7 @@ class basic_cBSS:
             if self.peel_off and sil[i] > self.sil_th and cov < self.cov_th:
                 white_sig, _ = peel_off(white_sig, spikes[i], win=0.025, fsamp=fsamp) 
 
-        # Remove dublicates        
+        # Remove duplicates        
         sources, spikes, sil = remove_duplicates(sources, spikes, sil, fsamp)
        
         return sources, spikes, sil
