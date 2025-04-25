@@ -1,5 +1,6 @@
 import numpy as np
 from decomposition_routines import *
+import sys
 
 class upper_bound:
 
@@ -94,7 +95,7 @@ class basic_cBSS:
         self.ext_fact = 12
         self.whitening_method = 'ZCA'
         self.whitening_reg  = 'auto'
-        self.n_iter = 50
+        self.n_iter = 100
         self.opt_function_exp = 3
         self.opt_max_iter = 100
         self.opt_tol = 1e-4
@@ -150,6 +151,7 @@ class basic_cBSS:
 
         # Loop over each MU
         for i in np.arange(self.n_iter):
+            # ToDo: Add other initalization strategies
             # Randomly initalize the MU filter
             w = np.random.randn(white_sig.shape[0])
             # fastICA fixedpoint optimization
@@ -167,10 +169,12 @@ class basic_cBSS:
             B[:,i] = w
 
             if self.peel_off and sil[i] > self.sil_th and cov < self.cov_th:
-                # Not implemented yet
-                pass    
-            
+                # ToDo: Not implemented yet
+                pass 
 
+        # Remove dublicates        
+        sources, spikes, sil = remove_dublicates(sources, spikes, sil, fsamp)
+       
         return sources, spikes, sil
 
 
