@@ -2,6 +2,9 @@ import numpy as np
 from scipy.linalg import toeplitz
 from scipy.signal import find_peaks
 from sklearn.cluster import KMeans
+import sys
+sys.path.append('../evaluation/')
+from evaluate import *
 
 def extension(Y, R):
     """
@@ -170,3 +173,51 @@ def gram_schmidt(w, B):
         u = u - projection
 
     return u
+
+def remove_dublicates(sources, spikes, sil, fsamp, max_shift=0.1, tol=0.001, threshold=0.3, min_num_spikes = 10):
+
+
+    n_source = sources.shape[0]
+    new_labels = np.arange(n_source)
+
+    for i in np.arange(n_source):
+
+        # Check if the source has already been labeled and if it contains enough spikes
+        if new_labels[i] < i:
+            continue
+        elif len(spikes) < min_num_spikes:
+            new_labels[i] = np.nan
+            continue
+
+        # Make binary spike train of source i    
+        st1 = get_bin_spikes(spikes[i], sources.shape[1])
+        
+        for j in np.arange(i+1, n_source):
+            # Make binary spike train of source j
+            st2 = get_bin_spikes(spikes[j], sources.shape[1])
+            # Compute the delay between source i and j
+            corr , shift = max_xcorr(st1, st2, max_shift=int(max_shift*fsamp))
+            # Compute the number of common spikes
+            tp, _, _ = match_spikes(spikes[i], spikes[j], shift=shift, tol=tol*fsamp) 
+            # Calculate the metaching rate and compare with threshold
+            denom = max(len(spikes[i]), len(spikes[j]))
+            match_score = tp / denom if denom > 0 else 0
+
+            if match_score >= threshold:
+                new_labels[j] = i
+
+    # Get the number of unqiue sources and initalize output variables
+    unique_labels = np.unique(new_labels[np.isfinite(new_labels)])
+    new_sources  = np.zeros((len(unique_labels),sources.shape[1]))
+    new_spikes = {i: [] for i in range(len(unique_labels))}
+    new_sil = np.zeros(len(new_labels))
+
+    # 
+    for i in np.arange(len(unique_labels)):
+        idx = (new_labels == i).astype(int)
+        best_idx = np.argmax(idx * sil)
+        new_sources[i,:] = sources[best_idx,:]
+        new_spikes[i] = spikes[best_idx]
+        new_sil[i] = sil[best_idx]
+
+    return new_sources, new_spikes, new_sil
