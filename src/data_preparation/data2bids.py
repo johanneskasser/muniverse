@@ -179,6 +179,7 @@ class bids_emg_recording(bids_dataset):
         if isinstance(data_obj, bids_dataset):
             self.root = data_obj.root
             self.datasetname = data_obj.datasetname
+            self.subjects_data = data_obj.subjects_data
             
         # Check if the function arguments are valid
         if type(subject) is not int or subject > 10**n_digits-1:

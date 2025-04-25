@@ -5,6 +5,7 @@ from edfio import *
 from data2bids import *
 from otb_io import open_otb, format_otb_channel_metadata, format_subject_metadata
 from sidecar_templates import emg_sidecar_template, dataset_sidecar_template
+from pathlib import Path
 
 # Helper function for getting electrode coordinates
 def get_grid_coordinates(grid_name):
@@ -62,7 +63,7 @@ n_sub = 6
 # Number of trials
 n_mvc = 2
 
-datapath = '/Downloads/Supplementary_data-1/RAW_HDEMG_SIGNALS/'
+datapath = str(Path.home()) + '/Downloads/Supplementary_data-1/RAW_HDEMG_SIGNALS/'
 
 subjects_data = {'name': ['sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06'], 
             'sex': ['M', 'M', 'M', 'M', 'M', 'M']}
@@ -80,17 +81,20 @@ for i in np.arange(n_sub):
         if i==1 and j==1:
             continue
 
+        folder = 'S' + str(i+1) + '/'
+
         if j==0:
-            filename = 'S'  + str(i+1) + '_30MVC'
+            filename = 'S'  + str(i+1) + '_30MVC.otb+'
             task = 'isometric-30-percent-mvc'
         elif j==1:
-            filename = 'S'  + str(i+1) + '_50MVC'
+            filename = 'S'  + str(i+1) + '_50MVC.otb+'
             task = 'isometric-50-percent-mvc'
 
 
         # Import daata from otb+ file
         ngrids = 4
-        (data, metadata) = open_otb('./../utils/S1_30MVC.otb+',ngrids)
+        fname =  datapath + folder + filename
+        (data, metadata) = open_otb(fname, ngrids)
 
         # Get and write channel metadata
         ch_metadata = format_otb_channel_metadata(data,metadata,ngrids)
