@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from scipy.linalg import toeplitz
 from scipy.signal import find_peaks
 from sklearn.cluster import KMeans
@@ -214,10 +215,31 @@ def remove_dublicates(sources, spikes, sil, fsamp, max_shift=0.1, tol=0.001, thr
 
     # 
     for i in np.arange(len(unique_labels)):
-        idx = (new_labels == i).astype(int)
+        idx = (new_labels == unique_labels[i]).astype(int)
         best_idx = np.argmax(idx * sil)
         new_sources[i,:] = sources[best_idx,:]
         new_spikes[i] = spikes[best_idx]
         new_sil[i] = sil[best_idx]
 
     return new_sources, new_spikes, new_sil
+
+def spike_dict_to_long_df(spike_dict, sort=True, fsamp = 2048):
+    """
+    Convert a dictionary of spike instances into a long-formatted DataFrame.
+
+    Parameters:
+        spike_dict (dict): Keys are unit IDs, values are lists or arrays of spike times.
+        sort (bool): Whether to sort the result by unit and spike time.
+
+    Returns:
+        pd.DataFrame: Long-formatted DataFrame with columns ['unit_id', 'spike_time']
+    """
+    rows = []
+    for unit_id, spikes in spike_dict.items():
+        for t in spikes:
+            rows.append({"source_id": unit_id, "spike_time": t/fsamp})
+    
+    df = pd.DataFrame(rows)
+    if sort:
+        df = df.sort_values(by=["source_id", "spike_time"]).reset_index(drop=True)
+    return df
