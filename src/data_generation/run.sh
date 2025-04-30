@@ -33,6 +33,17 @@ else
   CACHE_ARG=""
 fi
 
+# Detect NVIDIA GPU availability on the host
+if command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then
+  echo "[INFO] NVIDIA GPU detected, enabling GPU support"
+  GPU_FLAG_DOCKER="--gpus all"
+  GPU_FLAG_SINGULARITY="--nv"
+else
+  echo "[WARN] No NVIDIA GPU detected, falling back to CPU only"
+  GPU_FLAG_DOCKER=""
+  GPU_FLAG_SINGULARITY=""
+fi
+
 if [ "$ENGINE" == "docker" ]; then
   echo "[INFO] Running with Docker"
   docker run --platform linux/amd64 --rm \
