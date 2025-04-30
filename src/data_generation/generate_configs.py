@@ -215,3 +215,4 @@ def generate_configs(template_path, output_dir="configs", n_samples=10):
             with open(os.path.join(output_dir, f"config_{sample_id:04d}.json"), "w") as f:
                 json.dump(config, f, indent=2)
             sample_id += 1
+generate_configs('/home/dc23/projects/muniverse/muniverse-demo-pranav/src/data_generation/neuromotion_config_template.json')
