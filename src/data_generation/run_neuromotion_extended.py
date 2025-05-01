@@ -800,6 +800,9 @@ def generate_muaps(
     # Use specified number of motor units
     mn_pool = MotoneuronPool(num_mus, ms_label, **mn_default_settings)
     
+# Create a dictionary to store the properties
+    properties_dict = {}
+    
     # Assign physiological properties
     num_fb = np.round(MS_AREA[ms_label] * fibre_density)    # total number within one muscle
     config = edict({
@@ -813,8 +816,21 @@ def generate_muaps(
 
     if morph:
         num, depth, angle, iz, cv, length, base_muaps = normalise_properties(db, num_mus, steps)
+        # Store properties in dictionary
+        properties_dict = {
+            'num': num.cpu().numpy() if isinstance(num, torch.Tensor) else num,
+            'depth': depth.cpu().numpy() if isinstance(depth, torch.Tensor) else depth,
+            'angle': angle.cpu().numpy() if isinstance(angle, torch.Tensor) else angle,
+            'iz': iz.cpu().numpy() if isinstance(iz, torch.Tensor) else iz,
+            'cv': cv.cpu().numpy() if isinstance(cv, torch.Tensor) else cv,
+            'len': length.cpu().numpy() if isinstance(length, torch.Tensor) else length
+        }
     else:
         properties = mn_pool.assign_properties(config, normalise=True)
+        # Store original properties
+        properties_dict = {key: val for key, val in properties.items()}
+        
+        # Continue with existing code
         num = torch.from_numpy(properties['num']).reshape(num_mus, 1).repeat(1, steps)
         depth = torch.from_numpy(properties['depth']).reshape(num_mus, 1).repeat(1, steps)
         angle = torch.from_numpy(properties['angle']).reshape(num_mus, 1).repeat(1, steps)
@@ -831,6 +847,7 @@ def generate_muaps(
     ch_depth = changes['depth'].loc[:, tgt_ms_labels]
     ch_cv = changes['cv'].loc[:, tgt_ms_labels]
     ch_len = changes['len'].loc[:, tgt_ms_labels]
+    
 
     # Model
     generator = Generator(model_config.Model.Generator)
@@ -898,10 +915,51 @@ def generate_muaps(
         if torch.cuda.is_available():
             torch.cuda.set_rng_state(original_cuda_state)
     
-    return muaps, num_mus
+    # Return the properties along with the muaps and num_mus
+    return muaps, num_mus, properties_dict
+
+def save_motor_unit_properties_to_csv(properties_dict, csv_file):
+    """
+    Convert motor unit properties to a DataFrame and save as CSV.
+    
+    Args:
+        properties_dict (dict): Dictionary with property names as keys and numpy arrays as values.
+            Each array should have shape (num_mus,) or (num_mus, steps).
+        csv_file (str): Path to save the CSV file.
+    
+    Returns:
+        bool: True if saved successfully, False otherwise.
+    """
+    import pandas as pd
+    
+    try:
+        # Create a DataFrame with one row per motor unit
+        df = pd.DataFrame()
+        
+        # For each property, get the first value (assuming static or just want initial value)
+        for prop_name, prop_values in properties_dict.items():
+            # If property has shape (num_mus, steps), take the first step
+            if isinstance(prop_values, torch.Tensor):
+                prop_values = prop_values.cpu().numpy()
+                
+            if len(prop_values.shape) > 1 and prop_values.shape[1] > 1:
+                df[prop_name] = prop_values[:, 0]
+            else:
+                df[prop_name] = prop_values
+        
+        # Add a motor unit index column
+        df.insert(0, 'motor_unit_index', range(len(df)))
+        
+        # Save to CSV
+        df.to_csv(csv_file, index=False)
+        print(f"Saved motor unit properties to {csv_file}")
+        return True
+    except Exception as e:
+        print(f"Error saving motor unit properties: {e}")
+        return False
 
 
-def cache_muaps(muaps, cache_file, metadata, meta_file):
+def cache_muaps(muaps, cache_file, metadata, meta_file, properties_dict=None, properties_csv=None):
     """Cache MUAPs and metadata to files.
     
     Args:
@@ -909,12 +967,20 @@ def cache_muaps(muaps, cache_file, metadata, meta_file):
         cache_file (str): Path to save the MUAPs.
         metadata (dict): Metadata about the MUAPs.
         meta_file (str): Path to save the metadata.
+        properties_dict (dict, optional): Dictionary of motor unit properties.
+        properties_csv (str, optional): Path to save properties CSV.
         
     Returns:
         bool: True if caching succeeded, False otherwise.
     """
     try:
         np.save(cache_file, muaps)
+        
+        # Save properties if provided
+        if properties_dict is not None and properties_csv is not None:
+            save_motor_unit_properties_to_csv(properties_dict, properties_csv)
+            # Add properties CSV path to metadata
+            metadata['properties_csv'] = properties_csv
         
         with open(meta_file, 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -925,7 +991,6 @@ def cache_muaps(muaps, cache_file, metadata, meta_file):
         print(f"Error saving MUAP cache: {e}")
         return False
 
-
 def load_cached_muaps(cache_file, meta_file, required_metadata):
     """Load cached MUAPs if they exist and are compatible.
     
@@ -935,11 +1000,14 @@ def load_cached_muaps(cache_file, meta_file, required_metadata):
         required_metadata (dict): Required metadata for compatibility.
         
     Returns:
-        tuple: (muaps, is_compatible, num_mus)
+        tuple: (muaps, is_compatible, num_mus, properties_dict)
             - muaps: The loaded MUAPs or None if loading failed
             - is_compatible: True if the cache is compatible, False otherwise
             - num_mus: Number of motor units in the cache
+            - properties_dict: Dictionary of motor unit properties or None
     """
+    properties_dict = None
+    
     if os.path.exists(cache_file) and os.path.exists(meta_file):
         try:
             # Load metadata to check if the cache matches our requirements
@@ -959,15 +1027,28 @@ def load_cached_muaps(cache_file, meta_file, required_metadata):
                 print(f"Found compatible MUAP cache for subject {required_metadata.get('subject_id')}, muscle {required_metadata['muscle']}, loading...")
                 muaps = np.load(cache_file, allow_pickle=True)
                 num_mus = muap_metadata.get('num_mus')
+                
+                # Load properties if available
+                properties_csv = muap_metadata.get('properties_csv')
+                if properties_csv and os.path.exists(properties_csv):
+                    import pandas as pd
+                    try:
+                        df = pd.read_csv(properties_csv)
+                        # Convert DataFrame back to dictionary of numpy arrays
+                        properties_dict = {col: df[col].values for col in df.columns if col != 'motor_unit_index'}
+                        print(f"Loaded motor unit properties from {properties_csv}")
+                    except Exception as e:
+                        print(f"Error loading properties CSV: {e}")
+                
                 print(f"Loaded cached MUAPs from {cache_file}, shape: {muaps.shape}")
-                return muaps, True, num_mus
+                return muaps, True, num_mus, properties_dict
         except Exception as e:
             print(f"Error loading MUAP cache: {e}")
     
-    return None, False, None
+    return None, False, None, None
 
 
-def save_outputs(output_dir, emg, spikes, ext, cfg, metadata, angle_profile=None, muaps=None):
+def save_outputs(output_dir, emg, spikes, ext, cfg, metadata, angle_profile=None, muaps=None, properties_dict=None):
     """Save all outputs to the specified directory.
     
     Args:
@@ -979,6 +1060,7 @@ def save_outputs(output_dir, emg, spikes, ext, cfg, metadata, angle_profile=None
         metadata (dict): Metadata.
         angle_profile (numpy.ndarray, optional): Angle profile.
         muaps (numpy.ndarray, optional): MUAPs.
+        properties_dict (dict, optional): Dictionary of motor unit properties.
         
     Returns:
         dict: Paths to saved files.
@@ -1006,6 +1088,10 @@ def save_outputs(output_dir, emg, spikes, ext, cfg, metadata, angle_profile=None
     if muaps is not None:
         paths['muaps'] = os.path.join(output_dir, f'{subject_prefix}{muscle}_muaps.npy')
     
+    if properties_dict is not None:
+        paths['properties'] = os.path.join(output_dir, f'{subject_prefix}{muscle}_mn_properties.csv')
+        save_motor_unit_properties_to_csv(properties_dict, paths['properties'])
+    
     # Save all data
     np.save(paths['emg'], emg)
     np.save(paths['spikes'], spikes)
@@ -1020,7 +1106,7 @@ def save_outputs(output_dir, emg, spikes, ext, cfg, metadata, angle_profile=None
     # Save configuration and metadata
     with open(paths['config'], 'w') as f:
         json.dump(cfg, f, indent=2)
-    print(metadata)
+    
     with open(paths['metadata'], 'w') as f:
         json.dump(metadata, f, indent=2)
     
@@ -1104,10 +1190,11 @@ if __name__ == '__main__':
     # Setup MUAP cache with subject-specific path
     muap_cache_dir = os.path.join(os.path.dirname(args.output_dir), "muap_cache")
     os.makedirs(muap_cache_dir, exist_ok=True)
-    
+
     muap_cache_file = os.path.join(muap_cache_dir, f"{subject_id}_{ms_label}_{movement_cfg.MovementDOF}_muaps.npy")
     muap_meta_file = os.path.join(muap_cache_dir, f"{subject_id}_{ms_label}_{movement_cfg.MovementDOF}_metadata.json")
-    
+    properties_csv_file = os.path.join(muap_cache_dir, f"{subject_id}_{ms_label}_{movement_cfg.MovementDOF}_mn_properties.csv")
+
     # Required metadata for cache compatibility check
     required_metadata = {
         'muscle': ms_label,
@@ -1116,14 +1203,14 @@ if __name__ == '__main__':
         'electrode_cols': n_cols,
         'subject_id': subject_id
     }
-    
+
     # Try to load cached MUAPs
-    muaps, use_cached_muaps, cached_num_mus = load_cached_muaps(
+    muaps, use_cached_muaps, cached_num_mus, properties_dict = load_cached_muaps(
         muap_cache_file, 
         muap_meta_file, 
         required_metadata
     )
-    
+
     # If no compatible cache, generate new MUAPs
     if not use_cached_muaps:
         # Build movement profile for MUAP generation
@@ -1131,7 +1218,7 @@ if __name__ == '__main__':
         poses, durations, total_duration, steps = build_movement_profile(movement_cfg)
         
         # Generate MUAPs with subject-specific seed and MU count
-        muaps, num_mus = generate_muaps(
+        muaps, num_mus, properties_dict = generate_muaps(
             model_pth, ms_label, movement_cfg, fs_mov, poses, durations, steps,
             device, morph, muap_file, fibre_density, fs, filter_cfg, n_rows, n_cols,
             num_mus, subject_seed
@@ -1152,7 +1239,7 @@ if __name__ == '__main__':
             "date_created": time.strftime("%Y-%m-%d %H:%M:%S")
         }
         
-        cache_muaps(muaps, muap_cache_file, muap_cache_metadata, muap_meta_file)
+        cache_muaps(muaps, muap_cache_file, muap_cache_metadata, muap_meta_file, properties_dict, properties_csv_file)
     else:
         # If using cached MUAPs, make sure we use the cached number of units
         num_mus = cached_num_mus
@@ -1249,5 +1336,6 @@ if __name__ == '__main__':
         cfg, 
         metadata, 
         angle_profile, 
-        save_muaps
+        save_muaps,
+        properties_dict
     )
