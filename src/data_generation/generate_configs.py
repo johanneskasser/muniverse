@@ -6,7 +6,7 @@ from scipy.stats.qmc import LatinHypercube
 MUSCLE_LABELS = ["ECRB", "ECRL", "ECU", "EDCI", "PL", "FCU", "FCU_u", "FDSI"]
 MOVEMENT_DOFS = ["Flexion-Extension", "Radial-Ulnar-deviation"]
 MOVEMENT_PROFILES = ["Trapezoid_Isometric", "Triangular_Isometric", "Ballistic_Isometric", "Sinusoid_Isometric", "Triangular_Dynamic", "Sinusoid_Dynamic"]
-NROW_CHOICES = [5, 10, 32]
+NCOL_CHOICES = [5, 10, 32]
 MOVEMENT_ANGLE_RANGES = [(-65, 65), (-10, 25)]
 
 MOVEMENT_DOF_PROBS = [0.65, 0.35]
@@ -33,7 +33,7 @@ COMMON_PARAM_RANGES = {
     "FibreDensity": (150, 250),     # fibres/motor unit (int)
     "TargetMuscle": (0, 8),         # index, unitless (int)
     "MovementDOF": (0, 2),          # index, unitless (int)    
-    "NRows": (0, 3),                # unitless (int)
+    "NCols": (0, 3),                # unitless (int)
     "NoiseSeed": (1, 1000),         # unitless (int)
     "NoiseLeveldb": (10, 30),       # dB (int)
 }
@@ -189,8 +189,8 @@ def update_template(template, params):
     # Update RecordingConfiguration
     template["RecordingConfiguration"]["NoiseSeed"] = int(params["NoiseSeed"])
     template["RecordingConfiguration"]["NoiseLeveldb"] = int(params["NoiseLeveldb"])
-    n_rows = int(min(2, (5/3)*params["NRows"])) # ensures that 32 Rows are chosen 60% of the time
-    template["RecordingConfiguration"]["ElectrodeConfiguration"]["NRows"] = NROW_CHOICES[n_rows]
+    n_cols = int(min(2, (5/3)*params["NCols"])) # ensures that 32 Columns are chosen 60% of the time
+    template["RecordingConfiguration"]["ElectrodeConfiguration"]["NCols"] = NCOL_CHOICES[n_cols]
     return template
 
 

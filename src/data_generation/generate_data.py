@@ -1,11 +1,12 @@
 import subprocess
 import os
 import json
-from easydict import EasyDict as edict
-from src.utils.logging import RunLogger
+import time
+import shutil
+from ..utils.logging import RunLogger
 
 
-def generate_neuromotion_recording(input_config, output_dir, engine="singularity", container_name="environment/muniverse-test_neuromotion.sif"):
+def generate_neuromotion_recording(input_config, output_dir, engine="singularity", container_name="environment/muniverse-test_neuromotion.sif", cache_dir=None):
     """
     Generate a neuromotion recording using the specified configuration file.
 
@@ -17,9 +18,7 @@ def generate_neuromotion_recording(input_config, output_dir, engine="singularity
             For Docker: Name of the container image (e.g., "muniverse-test:neuromotion")
             For Singularity: Path to the container file (e.g., "environment/muniverse-test_neuromotion.sif")
             Defaults to "environment/muniverse-test_neuromotion.sif".
-
-    Returns:
-        str: Absolute path to the output directory containing the generated dataset.
+        cache_dir (str, optional): Path to cache directory. If None, no caching is used.
     """
     # Initialize logger
     logger = RunLogger()
@@ -56,47 +55,68 @@ def generate_neuromotion_recording(input_config, output_dir, engine="singularity
     # Convert paths to absolute paths
     input_config = os.path.abspath(input_config)
     output_dir = os.path.abspath(output_dir)
-    script_path = os.path.abspath("src/data_generation/run_neuromotion_extended.py")
+    
+    # Get the absolute path to the script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(current_dir, "run_neuromotion_extended.py")
+    
+    if not os.path.exists(script_path):
+        raise FileNotFoundError(f"Script not found at {script_path}")
+    
+    # Create a unique run directory with timestamp
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    run_id = f"run_{timestamp}"
+    run_dir = os.path.join(output_dir, run_id)
+    os.makedirs(run_dir, exist_ok=True)
     
     # Get the correct path to run.sh
-    run_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run.sh")
+    run_script_path = os.path.join(current_dir, "run.sh")
+    if not os.path.exists(run_script_path):
+        raise FileNotFoundError(f"run.sh not found at {run_script_path}")
     
     # Handle container name based on engine type
     if engine.lower() == "singularity":
         container_name = os.path.abspath(container_name)
     
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-
+    # Build command with optional cache directory
+    cmd = [run_script_path, engine, container_name, script_path, input_config, run_dir]
+    if cache_dir is not None:
+        cache_dir = os.path.abspath(cache_dir)
+        os.makedirs(cache_dir, exist_ok=True)
+        cmd.append(cache_dir)
+    
     # Execute the shell script using subprocess
     try:
         subprocess.run(
-            [run_script_path, engine, container_name, script_path, input_config, output_dir],
+            cmd,
             check=True,
-            cwd=os.path.dirname(os.path.abspath(__file__))
+            cwd=current_dir,
+            capture_output=True,
+            text=True
         )
-        print(f"[INFO] Data generated successfully at {output_dir}")
+        print(f"[INFO] Data generated successfully at {run_dir}")
         logger.set_return_code("run.sh", 0)
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Data generation failed: {e}")
+        print(f"[ERROR] Command output: {e.output}")
+        print(f"[ERROR] Command stderr: {e.stderr}")
         logger.set_return_code("run.sh", e.returncode)
         raise
     
     # Load runtime metadata from container
-    metadata_path = os.path.join(output_dir, 'metadata.json')
+    metadata_path = os.path.join(run_dir, 'metadata.json')
     if os.path.exists(metadata_path):
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
     
     # Log output files
-    for root, _, files in os.walk(output_dir):
+    for root, _, files in os.walk(run_dir):
         for file in files:
             file_path = os.path.join(root, file)
             logger.add_output(file_path, os.path.getsize(file_path))
     
     # Finalize and save the log
-    
-    log_path = logger.finalize(output_dir)
+    log_path = logger.finalize(run_dir)
     print(f"Run log saved to: {log_path}")
     
-    return output_dir
+    return run_dir

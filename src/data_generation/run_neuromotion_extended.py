@@ -50,10 +50,7 @@ def build_movement_profile(movement_config):
     Returns:
         tuple: (poses, durations, total_duration, steps)
     """
-    movement_type = movement_config.MovementType
     movement_dof = movement_config.MovementDOF
-    profile_params = movement_config.MovementProfileParameters
-    duration = movement_config.MovementDuration
     
     # For MUAP generation, we always use the full range of motion
     fs_mov = 50  # temporal frequency in Hz (sampling rate for movement)
@@ -1122,6 +1119,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generate EMG signals from movements')
     parser.add_argument('config_path', type=str, help='Path to input configuration JSON file')
     parser.add_argument('output_dir', type=str, help='Path to output directory')
+    parser.add_argument('--cache_dir', type=str, help='Path to cache directory (optional)', default=None)
     args = parser.parse_args()
 
     # Load configuration
@@ -1214,7 +1212,7 @@ if __name__ == '__main__':
     # If no compatible cache, generate new MUAPs
     if not use_cached_muaps:
         # Build movement profile for MUAP generation
-        fs_mov = 50  # Temporal frequency for movement simulation
+        fs_mov = 2  # Temporal frequency for movement simulation
         poses, durations, total_duration, steps = build_movement_profile(movement_cfg)
         
         # Generate MUAPs with subject-specific seed and MU count
