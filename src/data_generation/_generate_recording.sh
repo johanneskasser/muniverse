@@ -2,7 +2,7 @@
 set -e
 
 # Usage:
-# ./run.sh docker|singularity pranavm19/muniverse-test:neuromotion path/to/run_neuromotion.py path/to/input_config path/to/output_dir
+# ./generate_recording.sh docker|singularity pranavm19/muniverse-test:neuromotion path/to/run_neuromotion.py path/to/input_config path/to/output_dir
 
 ENGINE=$1
 CONTAINER_NAME=$2

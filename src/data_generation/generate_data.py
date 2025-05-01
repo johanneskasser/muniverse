@@ -58,7 +58,7 @@ def generate_neuromotion_recording(input_config, output_dir, engine="singularity
     
     # Get the absolute path to the script
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    script_path = os.path.join(current_dir, "run_neuromotion_extended.py")
+    script_path = os.path.join(current_dir, "_run_neuromotion.py")
     
     if not os.path.exists(script_path):
         raise FileNotFoundError(f"Script not found at {script_path}")
@@ -70,7 +70,7 @@ def generate_neuromotion_recording(input_config, output_dir, engine="singularity
     os.makedirs(run_dir, exist_ok=True)
     
     # Get the correct path to run.sh
-    run_script_path = os.path.join(current_dir, "run.sh")
+    run_script_path = os.path.join(current_dir, "_generate_recording.sh")
     if not os.path.exists(run_script_path):
         raise FileNotFoundError(f"run.sh not found at {run_script_path}")
     
