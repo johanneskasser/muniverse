@@ -6,18 +6,17 @@ import shutil
 from ..utils.logging import RunLogger
 
 
-def generate_neuromotion_recording(input_config, output_dir, engine="singularity", container_name="environment/muniverse-test_neuromotion.sif", cache_dir=None):
+def generate_neuromotion_recording(input_config, output_dir, engine, container, cache_dir=None):
     """
     Generate a neuromotion recording using the specified configuration file.
 
     Args:
         input_config (str): Path to the JSON configuration file containing movement and recording parameters.
         output_dir (str): Path to the output directory where the generated data will be saved.
-        engine (str, optional): Container engine to use ("docker" or "singularity"). Defaults to "singularity".
-        container_name (str, optional): 
+        engine (str): Container engine to use
+        container (str): 
             For Docker: Name of the container image (e.g., "muniverse-test:neuromotion")
-            For Singularity: Path to the container file (e.g., "environment/muniverse-test_neuromotion.sif")
-            Defaults to "environment/muniverse-test_neuromotion.sif".
+            For Singularity: Full path to the container file
         cache_dir (str, optional): Path to cache directory. If None, no caching is used.
     """
     # Initialize logger
@@ -31,7 +30,7 @@ def generate_neuromotion_recording(input_config, output_dir, engine="singularity
     # Get container info
     if engine == "docker":
         try:
-            inspect_output = subprocess.check_output([engine, "inspect", container_name]).decode()
+            inspect_output = subprocess.check_output([engine, "inspect", container]).decode()
             inspect_data = json.loads(inspect_output)[0]
             image_info = {
                 "name": inspect_data["RepoTags"][0] if inspect_data["RepoTags"] else "unknown",
@@ -73,13 +72,10 @@ def generate_neuromotion_recording(input_config, output_dir, engine="singularity
     run_script_path = os.path.join(current_dir, "_generate_recording.sh")
     if not os.path.exists(run_script_path):
         raise FileNotFoundError(f"run.sh not found at {run_script_path}")
-    
-    # Handle container name based on engine type
-    if engine.lower() == "singularity":
-        container_name = os.path.abspath(container_name)
+
     
     # Build command with optional cache directory
-    cmd = [run_script_path, engine, container_name, script_path, input_config, run_dir]
+    cmd = [run_script_path, engine, container, script_path, input_config, run_dir]
     if cache_dir is not None:
         cache_dir = os.path.abspath(cache_dir)
         os.makedirs(cache_dir, exist_ok=True)

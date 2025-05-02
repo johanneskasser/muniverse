@@ -43,11 +43,10 @@ def generate_recording(config):
         config (dict): Configuration dictionary that should include:
             - input_config: Path to the JSON configuration file containing movement and recording parameters
             - output_dir: Path to the output directory where the generated data will be saved
-            - engine (optional): Container engine to use ("docker" or "singularity"). Defaults to "singularity"
-            - container_name (optional): 
+            - engine: Container engine to use ("docker" or "singularity")
+            - container: 
                 For Docker: Name of the container image (e.g., "muniverse-test:neuromotion")
-                For Singularity: Path to the container file (e.g., "environment/muniverse-test_neuromotion.sif")
-                Defaults to "environment/muniverse-test_neuromotion.sif"
+                For Singularity: Full path to the container file (e.g., "environment/muniverse-test_neuromotion.sif")
             - cache_dir (optional): Path to cache directory. If None, no caching is used.
 
     Returns:
@@ -61,15 +60,10 @@ def generate_recording(config):
         raise ValueError("Both 'input_config' and 'output_dir' are required parameters")
     
     # Initialize containers first
-    engine = config.get("engine", init())
-
-    # Extract optional parameters with defaults
-    if engine == "singularity":
-        container_name = config.get("container_name", "environment/muniverse-test_neuromotion.sif")
-    else:
-        container_name = config.get("container_name", "pranavm19/muniverse-test:neuromotion")
+    engine = config.get("engine")
+    container = config.get("container")
 
     cache_dir = config.get("cache_dir", None)
     
     # Generate the dataset
-    return generate_neuromotion_recording(input_config, output_dir, engine, container_name, cache_dir)
+    return generate_neuromotion_recording(input_config, output_dir, engine, container, cache_dir)
