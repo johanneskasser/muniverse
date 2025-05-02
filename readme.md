@@ -1,5 +1,7 @@
 # **MUniverse: Benchmarking Motor Unit Decomposition Algorithms**
 
+<!-- [![Coverage](https://img.shields.io/badge/coverage-9%25-red)](https://github.com/pranavm19/muniverse-demo) -->
+
 MUniverse is a modular framework for **simulated and experimental EMG dataset generation**, **motor unit decomposition algorithm benchmarking**, and **performance evaluation**. It integrates Biomechanical simulation (via *NeuroMotion*), generative models (*BioMime*), standardized formats (e.g. BIDS/Croissant), and FAIR data hosting (Harvard Dataverse).
 
 ## Development Setup
@@ -9,7 +11,7 @@ MUniverse is distributed as a Python package. To set up the development environm
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/muniverse.git
+git clone https://github.com/pranavm19/muniverse.git
 cd muniverse
 ```
 

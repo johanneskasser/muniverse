@@ -20,6 +20,7 @@ dependencies = [
     "numpy",
     "scipy",
     "pandas",
+    "scikit-learn",
     "pyDataverse",
     "edfio",
     "python-dateutil",

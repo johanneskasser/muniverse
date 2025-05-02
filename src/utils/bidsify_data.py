@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import json
-from edfio import *
+from edfio import Edf, EdfSignal
 from ..data_preparation.data2bids import bids_dataset, bids_emg_recording, bids_neuromotion_recording
 
 def find_file_by_suffix(data_path, suffix):
@@ -101,19 +101,37 @@ def setup_channel_metadata(config):
         'unit': units
     }
 
-def get_task_name(config):
+def generate_task_name(config):
     """Generate a BIDS-compatible task name from config"""
     movement = config['MovementConfiguration']
     profile = movement['MovementProfileParameters']
     muscle = movement['TargetMuscle']
     movement_type = movement['MovementType']
+    movement_dof = movement['MovementDOF']
     effort_level = profile['EffortLevel']
+    subject_id = config['SubjectConfiguration']['SubjectSeed']
+    ncols = config['RecordingConfiguration']['ElectrodeConfiguration']['NCols']
+    
+    # Base task name with muscle, movement type, and DOF
+    task_name = f"{muscle.upper()}{movement_type.lower()}{movement_dof.split('-')[0].lower()}"
+    
+    # Add movement-specific parameters
     if movement_type == 'Isometric':
         effort_profile = profile['EffortProfile']
-    else:
-        effort_profile = profile['AngleProfile']
+        task_name += f"{effort_profile.lower()}"
+    else:  # Dynamic
+        angle_profile = profile['AngleProfile']
+        task_name += f"{angle_profile.lower()}"
     
-    return f"{muscle.upper()}{movement_type.lower()}{effort_profile.lower()}{effort_level}percentmvc"
+    # Add effort level and subject ID
+    task_name += f"{effort_level}percentmvc"
+    task_name += f"sub{subject_id}"
+    task_name += f"ncol{ncols}"
+
+    # Remove any non-alphanumeric characters
+    task_name = ''.join(char for char in task_name if char.isalnum())
+    
+    return task_name
 
 def get_subject_name(config):
     """Generate subject name from config"""
@@ -153,15 +171,22 @@ def neuromotion_to_bids(data_path, root='./', datasetname='simulated-BIDS-datase
     dataset.write()
     
     # Create recording
-    task_name = get_task_name(simulation_config)
+    task_name = generate_task_name(simulation_config)
     fsamp = simulation_config['RecordingConfiguration']['SamplingFrequency']
     
-    recording = bids_neuromotion_recording(
-        subject=simulation_config['SubjectConfiguration']['SubjectSeed'],
-        task=task_name,
-        datatype='emg',
-        data_obj=dataset
-    )
+    # Find a run_id that does not exist
+    run_id = 1
+    while run_id < 5:
+        recording = bids_neuromotion_recording(
+            subject=simulation_config['SubjectConfiguration']['SubjectSeed'],
+            task=task_name,
+            datatype='emg',
+            data_obj=dataset
+        )
+        emg_file_path = recording.datapath + recording.subject_name + '_' + recording.task + '_' + f'run-{run_id:0{recording.n_digits}d}_emg.edf'
+        if not os.path.exists(emg_file_path):
+            break
+        run_id += 1
     
     # Set up metadata
     recording.set_metadata('electrodes', setup_electrode_metadata(simulation_config))

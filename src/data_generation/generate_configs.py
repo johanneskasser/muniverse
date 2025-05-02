@@ -30,7 +30,7 @@ COMMON_PARAM_RANGES = {
 
 PARAM_RANGES_TRAPEZOID_ISO = {
     "EffortLevel": (5, 80),         # % MVC (int)
-    "RestDuration": (1, 3),         # s (int)
+    "RestDuration": (1, 3),         # s (int)
     "RampDuration": (5, 10),        # s (int)
     "HoldDuration": (15, 30),       # s (int)
 }
@@ -92,7 +92,10 @@ def scale_sample(sample, param_ranges):
     scaled = {}
     for i, (key, (low, high)) in enumerate(param_ranges.items()):
         val = sample[i] * (high - low) + low
-        scaled[key] = round(val, 2) if isinstance(val, float) else val
+        if isinstance(low, int) and isinstance(high, int):
+            scaled[key] = int(val)
+        else:
+            scaled[key] = round(val, 2) if isinstance(val, float) else val
     return scaled
 
 def get_target_angle_props(params):
@@ -215,6 +218,9 @@ def generate_configs(template_path, output_dir="configs", n_samples=10):
     if n_samples <  len(MOVEMENT_PROFILES):
         n_samples = len(MOVEMENT_PROFILES)
         raise Warning(f"n_samples was set to {n_samples} to ensure all movement conditions are covered.")
+    
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # Get number of samples per movement profile
     n_samples_per_profile = [round(n_samples*i) for i in MOVEMENT_PROFILE_PROBS]
@@ -242,7 +248,8 @@ def generate_configs(template_path, output_dir="configs", n_samples=10):
             scaled_common.update({"MovementProfile": profile})
             config = update_template(base_template.copy(), scaled_common)
             
-            with open(os.path.join(output_dir, f"config_{sample_id:04d}.json"), "w") as f:
+            n_digits = int(np.log10(n_samples)) + 1
+            with open(os.path.join(output_dir, f"config_{sample_id:0{n_digits}d}.json"), "w") as f:
                 json.dump(config, f, indent=2)
             sample_id += 1
 
