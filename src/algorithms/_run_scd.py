@@ -12,6 +12,28 @@ from config.structures import set_random_seed, Config
 from models.scd import SwarmContrastiveDecomposition
 from processing.postprocess import save_results
 
+# Prepare the rows
+def write_spike_tsv(dictionary, output_dir):
+    rows = []
+    for unit_id, ts_tensor in enumerate(dictionary['timestamps']):
+        timestamps = ts_tensor.tolist()  # Convert tensor to list
+        for ts in timestamps:
+            rows.append(f"{unit_id}\t{ts}")
+
+    # Write to TSV file
+    with open(output_dir / 'predicted_timestamps.tsv', 'w') as f:
+        f.write("unit_id\ttimestamp\n")  # Write header
+        for row in rows:
+            f.write(f"{row}\n")
+
+    return None
+
+def write_sources(dictionary, output_dir):
+    sources = np.hstack(dictionary['source'])
+    np.savez_compressed(output_dir / 'predicted_sources.npz', predicted_sources=sources)
+
+    return None
+
 def train(data_path: str, config_path: str, output_dir: str):
     """Run SCD decomposition on EMG data."""
     # Load and set config
@@ -29,28 +51,21 @@ def train(data_path: str, config_path: str, output_dir: str):
     neural_data = torch.from_numpy(npy_data).to(device=config.device, dtype=torch.float32)
     
     # Apply time window if specified
-    if config.end_time == -1:
-        neural_data = neural_data[config.start_time * config.sampling_frequency:, :]
-    else:
-        neural_data = neural_data[
-            config.start_time * config.sampling_frequency : 
-            config.end_time * config.sampling_frequency, 
-            :
-        ]
+    neural_data = neural_data[config.start_time * config.sampling_frequency : config.end_time * config.sampling_frequency, :]
 
     # Initiate the model and run
     model = SwarmContrastiveDecomposition()
     predicted_timestamps, dictionary = model.run(neural_data, config)
 
-    # Save results: TO-DO convert spikes and predicted sources to suitable format
+    # Save results: TODO convert spikes and predicted sources to suitable format
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / "decomposition_results.pkl"
     
-    save_results(output_path, dictionary)
-    print(f"Saved results to {output_path}")
+    write_spike_tsv(dictionary, output_dir)
+    write_sources(dictionary, output_dir)
+    print(f"Saved results to {output_dir}")
     
-    return dictionary, predicted_timestamps
+    return None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run SCD decomposition on EMG data')

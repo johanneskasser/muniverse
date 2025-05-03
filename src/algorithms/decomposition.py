@@ -1,87 +1,89 @@
 import json
-import os
 import subprocess
 from pathlib import Path
 import tempfile
-import shutil
-from edfio import Edf, read_edf
+from edfio import read_edf
 import numpy as np
-from typing import Dict, Tuple, Any
+import pandas as pd
+from typing import Dict, Tuple, Any, Optional, Union
 
 from .decomposition_methods import upper_bound, basic_cBSS
-from ..utils.bidsify_data import load_bids_data
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load configuration from a JSON file."""
     with open(config_path, 'r') as f:
         return json.load(f)
 
-def prepare_emg_data(edf_path: Path) -> np.ndarray:
-    """Load and prepare EMG data from EDF file."""
-    # Load EDF file
-    raw = read_edf(edf_path)
-    n_channels = raw.num_signals
-    signals = np.stack(raw.signals[i] for i in range(n_channels))
-    return signals
-
 def decompose_scd(
-    input_data: Dict,
-    input_config: str,
-    algorithm_config: str,
+    data: Union[str, np.ndarray],
     output_dir: Path,
+    algorithm_config: Optional[str] = None,
     engine: str = "singularity",
-    container: str = None
+    container: str = "environment/muniverse_scd.sif",
 ) -> Tuple[Dict, Dict]:
     """
     Run SCD decomposition using container.
     
     Args:
-        input_data: Dictionary containing BIDS data paths and metadata
-        input_config: Path to input configuration JSON file
-        algorithm_config: Path to algorithm configuration JSON file
+        data: Either a path to input data file (.npy or .edf) or numpy array of EMG data
+        algorithm_config: Optional path to algorithm configuration JSON file
         output_dir: Directory to save results
         engine: Container engine to use ("docker" or "singularity")
         container: Path to container image
+        cache_dir: Optional directory for caching
     
     Returns:
         Tuple containing:
         - Dictionary with decomposition results
         - Dictionary with processing metadata
     """
-    # Load configurations
-    input_cfg = load_config(input_config)
-    algo_cfg = load_config(algorithm_config)
+    # Load algorithm config if provided, otherwise use defaults
+    if not algorithm_config:
+        config_dir = Path(__file__).parent.parent.parent / "configs"
+        algorithm_config = config_dir / "scd.json"
+        if not algorithm_config.exists():
+            raise FileNotFoundError(f"Default SCD config not found at {algorithm_config}")
     
     # Create temporary directory for intermediate files
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir)
         
-        # Prepare EMG data
-        emg_data = prepare_emg_data(input_data['emg_path'])
-
-        # TODO: handle setting start and end time, sampling frequency, and cov_var
-        
-        # Save EMG data as temporary .npy file
-        temp_emg_path = temp_dir / "temp_emg.npy"
-        np.save(temp_emg_path, emg_data)
+        # Convert input to .npy file if needed
+        if isinstance(data, np.ndarray):
+            temp_emg_path = temp_dir / "temp_emg.npy"
+            np.save(temp_emg_path, data)
+        elif isinstance(data, str):
+            data_path = Path(data)
+            if data_path.suffix == '.edf':
+                # Load EDF and save as .npy
+                raw = read_edf(data_path)
+                n_channels = raw.num_signals
+                emg_data = np.stack([raw.signals[i].data for i in range(n_channels)])
+                temp_emg_path = temp_dir / "temp_emg.npy"
+                np.save(temp_emg_path, emg_data)
+            else:  # .npy file
+                temp_emg_path = data_path
+        else:
+            raise TypeError("data must be either a file path (str) or numpy array")
         
         # Get the absolute path to the script
         current_dir = Path(__file__).parent
-        run_script = current_dir / "_run_scd.sh"
+        run_script_path = current_dir / "_run_scd.sh"
+        script_path = current_dir / "_run_scd.py"
         
-        if not run_script.exists():
-            raise FileNotFoundError(f"Script not found at {run_script}")
-        
+        if not run_script_path.exists():
+            raise FileNotFoundError(f"Script not found at {run_script_path}")
+
         # Build container command
         cmd = [
-            str(run_script),
+            str(run_script_path),
+            engine,
+            container,
+            str(script_path),
             str(temp_emg_path),
             str(algorithm_config),
-            str(output_dir),
-            engine,
-            str(container)
+            str(output_dir)
         ]
-        
         # Run container
         try:
             subprocess.run(cmd, check=True, cwd=current_dir)
@@ -101,18 +103,16 @@ def decompose_scd(
         return results_path, metadata_path
 
 def decompose_upperbound(
-    input_data: Dict,
-    input_config: str,
-    algorithm_config: str,
+    data: np.ndarray,
+    algorithm_config: Optional[str],
     output_dir: Path
 ) -> Tuple[Dict, Dict]:
     """
     Run upperbound decomposition.
     
     Args:
-        input_data: Dictionary containing BIDS data paths and metadata
-        input_config: Path to input configuration JSON file
-        algorithm_config: Path to algorithm configuration JSON file
+        data: EMG data array (channels x samples)
+        algorithm_config: Optional path to algorithm configuration JSON file
         output_dir: Directory to save results
     
     Returns:
@@ -120,16 +120,15 @@ def decompose_upperbound(
         - Dictionary with decomposition results
         - Dictionary with processing metadata
     """
-    # Load configurations
-    input_cfg = load_config(input_config)
-    algo_cfg = load_config(algorithm_config)
-    
-    # Prepare EMG data
-    emg_data = prepare_emg_data(input_data['emg_path'], input_data['metadata'])
+    # Load algorithm config if provided, otherwise use defaults
+    if algorithm_config:
+        algo_cfg = load_config(algorithm_config)
+    else:
+        algo_cfg = {}  # Will use defaults
     
     # Initialize and run upperbound
     ub = upper_bound(config=algo_cfg)
-    sources, spikes, sil = ub.decompose(emg_data, input_cfg['sampling_frequency'])
+    sources, spikes, sil = ub.decompose(data, fsamp=2048)  # TODO: Make sampling frequency configurable
     
     # Prepare results
     results = {
@@ -140,12 +139,7 @@ def decompose_upperbound(
     
     # Prepare metadata
     metadata = {
-        'InputConfig': input_cfg,
         'AlgorithmConfig': algo_cfg,
-        'InputDataInfo': {
-            'EMGPath': str(input_data['emg_path']),
-            'Metadata': input_data['metadata']
-        },
         'ProcessingInfo': {
             'Method': 'upperbound',
             'NumComponents': len(spikes)
@@ -158,18 +152,16 @@ def decompose_upperbound(
     return results, metadata
 
 def decompose_cbss(
-    input_data: Dict,
-    input_config: str,
-    algorithm_config: str,
+    data: np.ndarray,
+    algorithm_config: Optional[str],
     output_dir: Path
 ) -> Tuple[Dict, Dict]:
     """
     Run CBSS decomposition.
     
     Args:
-        input_data: Dictionary containing BIDS data paths and metadata
-        input_config: Path to input configuration JSON file
-        algorithm_config: Path to algorithm configuration JSON file
+        data: EMG data array (channels x samples)
+        algorithm_config: Optional path to algorithm configuration JSON file
         output_dir: Directory to save results
     
     Returns:
@@ -177,16 +169,15 @@ def decompose_cbss(
         - Dictionary with decomposition results
         - Dictionary with processing metadata
     """
-    # Load configurations
-    input_cfg = load_config(input_config)
-    algo_cfg = load_config(algorithm_config)
-    
-    # Prepare EMG data
-    emg_data = prepare_emg_data(input_data['emg_path'], input_data['metadata'])
+    # Load algorithm config if provided, otherwise use defaults
+    if algorithm_config:
+        algo_cfg = load_config(algorithm_config)
+    else:
+        algo_cfg = {}  # Will use defaults
     
     # Initialize and run CBSS
     cbss = basic_cBSS(config=algo_cfg)
-    sources, spikes, mu_filters = cbss.decompose(emg_data, input_cfg['sampling_frequency'])
+    sources, spikes, mu_filters = cbss.decompose(data, fsamp=2048)  # TODO: Make sampling frequency configurable
     
     # Prepare results
     results = {
@@ -197,12 +188,7 @@ def decompose_cbss(
     
     # Prepare metadata
     metadata = {
-        'InputConfig': input_cfg,
         'AlgorithmConfig': algo_cfg,
-        'InputDataInfo': {
-            'EMGPath': str(input_data['emg_path']),
-            'Metadata': input_data['metadata']
-        },
         'ProcessingInfo': {
             'Method': 'cbss',
             'NumComponents': len(spikes)

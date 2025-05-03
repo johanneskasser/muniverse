@@ -3,7 +3,8 @@ Benchmark algorithms for decomposition.
 """
 
 from pathlib import Path
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Optional, Union
+import numpy as np
 from ..utils.containers import pull_container, verify_container_engine
 from .decomposition import decompose_scd, decompose_upperbound, decompose_cbss
 
@@ -38,23 +39,21 @@ def init():
     return engine
 
 def decompose_recording(
-    input_data: Dict,
-    input_config: str,
-    algorithm_config: str,
+    data: Union[str, np.ndarray],
     method: str = "scd",
+    algorithm_config: Optional[str] = None,
     output_dir: str = "outputs",
     engine: str = "singularity",
-    container: str = None,
-    cache_dir: str = None
+    container: Optional[str] = None,
+    cache_dir: Optional[str] = None
 ) -> Tuple[Dict, Dict]:
     """
     Decompose EMG recordings using specified method.
     
     Args:
-        input_data: Dictionary containing BIDS data paths and metadata
-        input_config: Path to input configuration JSON file
-        algorithm_config: Path to algorithm configuration JSON file
+        data: Either a path to input data file (.npy or .edf) or a numpy array of EMG data
         method: Decomposition method to use ("scd", "upperbound", or "cbss")
+        algorithm_config: Optional path to algorithm configuration JSON file
         output_dir: Directory to save results
         engine: Container engine to use ("docker" or "singularity")
         container: Path to container image (required for SCD method)
@@ -74,27 +73,49 @@ def decompose_recording(
         if container is None:
             raise ValueError("Container path must be provided for SCD method")
         return decompose_scd(
-            input_data=input_data,
-            input_config=input_config,
+            data=data,  # Will be converted to .npy file if needed
             algorithm_config=algorithm_config,
             output_dir=output_dir,
             engine=engine,
             container=container,
             cache_dir=cache_dir
         )
-    elif method == "upperbound":
-        return decompose_upperbound(
-            input_data=input_data,
-            input_config=input_config,
-            algorithm_config=algorithm_config,
-            output_dir=output_dir
-        )
-    elif method == "cbss":
-        return decompose_cbss(
-            input_data=input_data,
-            input_config=input_config,
-            algorithm_config=algorithm_config,
-            output_dir=output_dir
-        )
+    elif method in ["upperbound", "cbss"]:
+        # For internal methods, convert to numpy array if needed
+        if isinstance(data, str):
+            data_path = Path(data)
+            if not data_path.exists():
+                raise FileNotFoundError(f"Input data file not found: {data_path}")
+            if data_path.suffix not in ['.npy', '.edf']:
+                raise ValueError(f"Unsupported file format: {data_path.suffix}. Must be .npy or .edf")
+            
+            # Load data into numpy array
+            if data_path.suffix == '.edf':
+                from edfio import read_edf
+                raw = read_edf(data_path)
+                n_channels = raw.num_signals
+                data = np.stack(raw.signals[i] for i in range(n_channels))
+            else:  # .npy
+                data = np.load(data_path)
+        
+        # Validate numpy array
+        if not isinstance(data, np.ndarray):
+            raise TypeError("data must be either a file path (str) or numpy array")
+        if data.ndim != 2:
+            raise ValueError("EMG data must be a 2D array (channels x samples)")
+        
+        # Call appropriate method
+        if method == "upperbound":
+            return decompose_upperbound(
+                data=data,
+                algorithm_config=algorithm_config,
+                output_dir=output_dir
+            )
+        else:  # cbss
+            return decompose_cbss(
+                data=data,
+                algorithm_config=algorithm_config,
+                output_dir=output_dir
+            )
     else:
         raise ValueError(f"Unknown method: {method}. Must be one of: scd, upperbound, cbss") 
