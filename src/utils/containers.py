@@ -90,7 +90,7 @@ def pull_container(name, engine="docker"):
     Pull or verify a container image.
 
     Args:
-        name (str): The identifier for the container image (e.g., "pranavm19/muniverse-test:neuromotion")
+        name (str): The identifier for the container image (e.g., "pranavm19/muniverse:neuromotion")
         engine (str): The container engine to use ("docker" or "singularity")
 
     Raises:

@@ -2,7 +2,7 @@ import numpy as np
 import os
 import json
 import pandas as pd
-from edfio import *
+from edfio import Edf, EdfSignal, read_edf
     
 class bids_dataset:
 

@@ -1,4 +1,4 @@
-IMAGE_NAME = muniverse-test
+IMAGE_NAME = muniverse
 TAG ?= scd
 REGISTRY = docker.io/pranavm19
 
