@@ -1072,35 +1072,33 @@ def save_outputs(output_dir, emg, spikes, ext, cfg, metadata, angle_profile=None
     
     # Prepare output paths with subject ID prefix
     paths = {
-        'emg': os.path.join(output_dir, f'{subject_prefix}{muscle}_emg.npy'),
-        'spikes': os.path.join(output_dir, f'{subject_prefix}{muscle}_spikes.npy'),
-        'effort': os.path.join(output_dir, f'{subject_prefix}{muscle}_effort_profile.npy'),
+        'data': os.path.join(output_dir, f'{subject_prefix}{muscle}_data.npz'),
         'config': os.path.join(output_dir, f'{subject_prefix}{muscle}_config_used.json'),
         'metadata': os.path.join(output_dir, f'{subject_prefix}{muscle}_metadata.json')
     }
     
+    # Save all numpy arrays in a single compressed file
+    data_dict = {
+        'emg': emg,
+        'spikes': np.array(spikes, dtype=object),  # Convert list to numpy array
+        'effort_profile': ext
+    }
+    
     if angle_profile is not None:
-        paths['angle'] = os.path.join(output_dir, f'{subject_prefix}{muscle}_angle_profile.npy')
+        data_dict['angle_profile'] = angle_profile
     
     if muaps is not None:
-        paths['muaps'] = os.path.join(output_dir, f'{subject_prefix}{muscle}_muaps.npy')
+        data_dict['muaps'] = muaps
     
+    # Save all data in a single compressed file
+    np.savez_compressed(paths['data'], **data_dict)
+    
+    # Save properties if provided
     if properties_dict is not None:
         paths['properties'] = os.path.join(output_dir, f'{subject_prefix}{muscle}_mn_properties.csv')
         save_motor_unit_properties_to_csv(properties_dict, paths['properties'])
     
-    # Save all data
-    np.save(paths['emg'], emg)
-    np.save(paths['spikes'], spikes)
-    np.save(paths['effort'], ext)
-    
-    if angle_profile is not None:
-        np.save(paths['angle'], angle_profile)
-    
-    if muaps is not None:
-        np.save(paths['muaps'], muaps)
-    
-    # Save configuration and metadata
+    # Save configuration and metadata as JSON
     with open(paths['config'], 'w') as f:
         json.dump(cfg, f, indent=2)
     
@@ -1135,7 +1133,7 @@ if __name__ == '__main__':
     subject_cfg = cfg.SubjectConfiguration
     fibre_density = subject_cfg.FibreDensity
     subject_seed = subject_cfg.SubjectSeed
-    subject_id = subject_cfg.get('SubjectID', f"subject_{subject_seed}")
+    subject_id = subject_cfg.get('SubjectID', f"sub{subject_seed}")
     
     # Create muscle-to-motor-unit mapping from the config
     muscle_mu_map = {}
@@ -1329,7 +1327,8 @@ if __name__ == '__main__':
 
     
     # Save only new MUAPs if we generated them
-    save_muaps = None if use_cached_muaps else muaps
+    save_muaps = None if use_cached_muaps or use_cache else muaps
+    
     # Save all outputs
     save_outputs(
         args.output_dir, 
