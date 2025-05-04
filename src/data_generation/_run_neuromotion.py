@@ -1072,26 +1072,25 @@ def save_outputs(output_dir, emg, spikes, ext, cfg, metadata, angle_profile=None
     
     # Prepare output paths with subject ID prefix
     paths = {
-        'data': os.path.join(output_dir, f'{subject_prefix}{muscle}_data.npz'),
+        'emg': os.path.join(output_dir, f'{subject_prefix}{muscle}_emg.npz'),
+        'spikes': os.path.join(output_dir, f'{subject_prefix}{muscle}_spikes.npz'),
+        'effort_profile': os.path.join(output_dir, f'{subject_prefix}{muscle}_effort_profile.npz'),
         'config': os.path.join(output_dir, f'{subject_prefix}{muscle}_config_used.json'),
         'metadata': os.path.join(output_dir, f'{subject_prefix}{muscle}_metadata.json')
     }
     
-    # Save all numpy arrays in a single compressed file
-    data_dict = {
-        'emg': emg,
-        'spikes': np.array(spikes, dtype=object),  # Convert list to numpy array
-        'effort_profile': ext
-    }
+    # Save each array as a separate compressed file
+    np.savez_compressed(paths['emg'], emg=emg)
+    np.savez_compressed(paths['spikes'], spikes=np.array(spikes, dtype=object))  # Convert list to numpy array
+    np.savez_compressed(paths['effort_profile'], effort_profile=ext)
     
     if angle_profile is not None:
-        data_dict['angle_profile'] = angle_profile
+        paths['angle_profile'] = os.path.join(output_dir, f'{subject_prefix}{muscle}_angle_profile.npz')
+        np.savez_compressed(paths['angle_profile'], angle_profile=angle_profile)
     
     if muaps is not None:
-        data_dict['muaps'] = muaps
-    
-    # Save all data in a single compressed file
-    np.savez_compressed(paths['data'], **data_dict)
+        paths['muaps'] = os.path.join(output_dir, f'{subject_prefix}{muscle}_muaps.npz')
+        np.savez_compressed(paths['muaps'], muaps=muaps)
     
     # Save properties if provided
     if properties_dict is not None:

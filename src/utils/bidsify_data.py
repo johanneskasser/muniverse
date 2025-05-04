@@ -14,7 +14,7 @@ def find_file_by_suffix(data_path, suffix):
 
 def setup_spikes_data(data_path):
     """Load and format spike times"""
-    spikes_file = find_file_by_suffix(data_path, '_spikes.npy')
+    spikes_file = find_file_by_suffix(data_path, '_spikes.npz')
     spikes = np.load(spikes_file, allow_pickle=True)
     
     # Convert to long format DataFrame
@@ -27,8 +27,8 @@ def setup_spikes_data(data_path):
 
 def setup_motor_units_data(data_path):
     """Load and format motor unit properties"""
-    recruitment_file = find_file_by_suffix(data_path, '_recruitment_thresholds.npy')
-    properties_file = find_file_by_suffix(data_path, '_unit_properties.npy')
+    recruitment_file = find_file_by_suffix(data_path, '_recruitment_thresholds.npz')
+    properties_file = find_file_by_suffix(data_path, '_unit_properties.npz')
     
     recruitment_thresholds = np.load(recruitment_file, allow_pickle=True)
     unit_properties = np.load(properties_file, allow_pickle=True)
@@ -46,8 +46,8 @@ def setup_motor_units_data(data_path):
 
 def setup_internals_data(data_path, fsamp):
     """Load and format internal variables"""
-    effort_file = find_file_by_suffix(data_path, '_effort_profile.npy')
-    angle_file = find_file_by_suffix(data_path, '_angle_profile.npy')
+    effort_file = find_file_by_suffix(data_path, '_effort_profile.npz')
+    angle_file = find_file_by_suffix(data_path, '_angle_profile.npz')
     
     effort_profile = np.load(effort_file, allow_pickle=True)
     angle_profile = np.load(angle_file, allow_pickle=True)
@@ -209,7 +209,7 @@ def neuromotion_to_bids(data_path, root='./', datasetname='simulated-BIDS-datase
     recording.set_metadata('emg_sidecar', emg_sidecar)
     
     # Set up data
-    emg_file = find_file_by_suffix(data_path, '_emg.npy')
+    emg_file = find_file_by_suffix(data_path, '_emg.npz')
     data = np.load(emg_file, allow_pickle=True)
     recording.set_data('emg_data', data, fsamp)
     
