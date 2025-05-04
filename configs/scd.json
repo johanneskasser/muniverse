@@ -1,0 +1,12 @@
+{
+    "device": "cpu",
+    "acceptance_silhouette": 0.05,
+    "extension_factor": 1,
+    "low_pass_cutoff": 500,
+    "high_pass_cutoff": 10,
+    "start_time": 18,
+    "end_time": -1,
+    "max_iterations": 2,
+    "sampling_frequency": 2048,
+    "use_coeff_var_fitness": true
+} 

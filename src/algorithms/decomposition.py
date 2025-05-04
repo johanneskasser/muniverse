@@ -6,8 +6,10 @@ from edfio import read_edf
 import numpy as np
 import pandas as pd
 from typing import Dict, Tuple, Any, Optional, Union
-
+import os
+import time
 from .decomposition_methods import upper_bound, basic_cBSS
+from ..utils.logging import AlgorithmLogger
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load configuration from a JSON file."""
@@ -37,13 +39,64 @@ def decompose_scd(
         - Dictionary with decomposition results
         - Dictionary with processing metadata
     """
-    # Load algorithm config if provided, otherwise use defaults
-    if not algorithm_config:
+    # Initialize logger
+    logger = AlgorithmLogger()
+    
+    # Set input data information
+    if isinstance(data, str):
+        data_path = Path(data)
+        logger.set_input_data(
+            file_name=data_path.name,
+            file_format=data_path.suffix[1:]  # Remove the dot
+        )
+    else:
+        logger.set_input_data(
+            file_name="numpy_array",
+            file_format="npy"
+        )
+    
+    # Load and set algorithm configuration
+    if algorithm_config:
+        algo_cfg = load_config(algorithm_config)
+        logger.set_algorithm_config(algo_cfg)
+    else:
         config_dir = Path(__file__).parent.parent.parent / "configs"
         algorithm_config = config_dir / "scd.json"
         if not algorithm_config.exists():
             raise FileNotFoundError(f"Default SCD config not found at {algorithm_config}")
+        algo_cfg = load_config(algorithm_config)
+        logger.set_algorithm_config(algo_cfg)
     
+    # Get container info
+    if engine == "docker":
+        try:
+            inspect_output = subprocess.check_output([engine, "inspect", container]).decode()
+            inspect_data = json.loads(inspect_output)[0]
+            image_info = {
+                "name": inspect_data["RepoTags"][0] if inspect_data["RepoTags"] else "unknown",
+                "id": inspect_data["Id"],
+                "created": inspect_data["Created"]
+            }
+        except Exception as e:
+            print(f"Warning: Could not get container info: {e}")
+            image_info = {"name": "unknown", "id": "unknown", "created": "unknown"}
+    else:
+        image_info = {"name": "unknown", "id": "unknown", "created": "unknown"}
+
+    # Set container info
+    logger.set_container_info(
+        engine=engine,
+        engine_version=subprocess.check_output([engine, "--version"]).decode().strip(),
+        image=image_info["name"],
+        image_id=image_info["id"]
+    )
+    
+    # Create a unique run directory with timestamp
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    run_id = f"run_{timestamp}"
+    run_dir = os.path.join(output_dir, run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
     # Create temporary directory for intermediate files
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir)
@@ -74,6 +127,13 @@ def decompose_scd(
         if not run_script_path.exists():
             raise FileNotFoundError(f"Script not found at {run_script_path}")
 
+        # Add preprocessing step
+        logger.add_processing_step("Preprocessing", {
+            "InputFormat": data_path.suffix[1:] if isinstance(data, str) else "numpy_array",
+            "OutputFormat": "npy",
+            "Description": "Convert input data to numpy format for processing"
+        })
+
         # Build container command
         cmd = [
             str(run_script_path),
@@ -82,25 +142,42 @@ def decompose_scd(
             str(script_path),
             str(temp_emg_path),
             str(algorithm_config),
-            str(output_dir)
+            str(run_dir)
         ]
+        
         # Run container
         try:
             subprocess.run(cmd, check=True, cwd=current_dir)
-            print(f"[INFO] Decomposition completed successfully at {output_dir}")
+            print(f"[INFO] Decomposition completed successfully at {run_dir}")
+            logger.set_return_code("run.sh", 0)
+            
+            # Add decomposition step
+            logger.add_processing_step("Decomposition", {
+                "Method": "Swarm Contrastive Decomposition",
+                "Configuration": algo_cfg,
+                "Description": "Run SCD algorithm on preprocessed data"
+            })
+            
         except subprocess.CalledProcessError as e:
             print(f"[ERROR] Decomposition failed: {e}")
             print(f"[ERROR] Command output: {e.output if hasattr(e, 'output') else 'No output'}")
             print(f"[ERROR] Command stderr: {e.stderr if hasattr(e, 'stderr') else 'No stderr'}")
+            logger.set_return_code("run.sh", e.returncode)
             raise
         
-        # Load results
-        results_path = output_dir / "decomposition_results.pkl"
-        metadata_path = output_dir / "processing_metadata.json"
+        print(f"[INFO] Results saved to {output_dir}")
         
-        print(f"[INFO] Results saved to {results_path}")
+        # Log output files
+        for root, _, files in os.walk(output_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                logger.add_output(file_path, os.path.getsize(file_path))
         
-        return results_path, metadata_path
+        # Finalize and save the log
+        log_path = logger.finalize(output_dir)
+        print(f"Run log saved to: {log_path}")
+        
+        return None
 
 def decompose_upperbound(
     data: np.ndarray,
@@ -120,15 +197,39 @@ def decompose_upperbound(
         - Dictionary with decomposition results
         - Dictionary with processing metadata
     """
+    # Initialize logger
+    logger = AlgorithmLogger()
+    
+    # Set input data information
+    logger.set_input_data(
+        file_name="numpy_array",
+        file_format="npy"
+    )
+    
     # Load algorithm config if provided, otherwise use defaults
     if algorithm_config:
         algo_cfg = load_config(algorithm_config)
     else:
         algo_cfg = {}  # Will use defaults
     
+    logger.set_algorithm_config(algo_cfg)
+    
+    # Add preprocessing step
+    logger.add_processing_step("Preprocessing", {
+        "InputFormat": "numpy_array",
+        "Description": "Input data is already in numpy format"
+    })
+    
     # Initialize and run upperbound
     ub = upper_bound(config=algo_cfg)
     sources, spikes, sil = ub.decompose(data, fsamp=2048)  # TODO: Make sampling frequency configurable
+    
+    # Add decomposition step
+    logger.add_processing_step("Decomposition", {
+        "Method": "UpperBound",
+        "Configuration": algo_cfg,
+        "Description": "Run UpperBound algorithm on input data"
+    })
     
     # Prepare results
     results = {
@@ -137,19 +238,20 @@ def decompose_upperbound(
         'silhouette': sil
     }
     
-    # Prepare metadata
-    metadata = {
-        'AlgorithmConfig': algo_cfg,
-        'ProcessingInfo': {
-            'Method': 'upperbound',
-            'NumComponents': len(spikes)
-        }
-    }
-    
     # Save results
-    save_decomposition_results(output_dir, results, metadata)
+    save_decomposition_results(output_dir, results, {})
     
-    return results, metadata
+    # Log output files
+    for root, _, files in os.walk(output_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            logger.add_output(file_path, os.path.getsize(file_path))
+    
+    # Finalize and save the log
+    log_path = logger.finalize(output_dir)
+    print(f"Run log saved to: {log_path}")
+    
+    return results, {}
 
 def decompose_cbss(
     data: np.ndarray,
@@ -169,15 +271,39 @@ def decompose_cbss(
         - Dictionary with decomposition results
         - Dictionary with processing metadata
     """
+    # Initialize logger
+    logger = AlgorithmLogger()
+    
+    # Set input data information
+    logger.set_input_data(
+        file_name="numpy_array",
+        file_format="npy"
+    )
+    
     # Load algorithm config if provided, otherwise use defaults
     if algorithm_config:
         algo_cfg = load_config(algorithm_config)
     else:
         algo_cfg = {}  # Will use defaults
     
+    logger.set_algorithm_config(algo_cfg)
+    
+    # Add preprocessing step
+    logger.add_processing_step("Preprocessing", {
+        "InputFormat": "numpy_array",
+        "Description": "Input data is already in numpy format"
+    })
+    
     # Initialize and run CBSS
     cbss = basic_cBSS(config=algo_cfg)
     sources, spikes, mu_filters = cbss.decompose(data, fsamp=2048)  # TODO: Make sampling frequency configurable
+    
+    # Add decomposition step
+    logger.add_processing_step("Decomposition", {
+        "Method": "CBSS",
+        "Configuration": algo_cfg,
+        "Description": "Run CBSS algorithm on input data"
+    })
     
     # Prepare results
     results = {
@@ -186,19 +312,20 @@ def decompose_cbss(
         'mu_filters': mu_filters
     }
     
-    # Prepare metadata
-    metadata = {
-        'AlgorithmConfig': algo_cfg,
-        'ProcessingInfo': {
-            'Method': 'cbss',
-            'NumComponents': len(spikes)
-        }
-    }
-    
     # Save results
-    save_decomposition_results(output_dir, results, metadata)
+    save_decomposition_results(output_dir, results, {})
     
-    return results, metadata
+    # Log output files
+    for root, _, files in os.walk(output_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            logger.add_output(file_path, os.path.getsize(file_path))
+    
+    # Finalize and save the log
+    log_path = logger.finalize(output_dir)
+    print(f"Run log saved to: {log_path}")
+    
+    return results, {}
 
 def save_decomposition_results(output_dir: Path, results: Dict, metadata: Dict):
     """Save decomposition results and metadata."""

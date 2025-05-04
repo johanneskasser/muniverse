@@ -3,7 +3,7 @@ import os
 import json
 import time
 import shutil
-from ..utils.logging import RunLogger
+from ..utils.logging import SimulationLogger
 
 
 def generate_neuromotion_recording(input_config, output_dir, engine, container, cache_dir=None):
@@ -20,7 +20,7 @@ def generate_neuromotion_recording(input_config, output_dir, engine, container, 
         cache_dir (str, optional): Path to cache directory. If None, no caching is used.
     """
     # Initialize logger
-    logger = RunLogger()
+    logger = SimulationLogger()
     
     # Load and log configuration
     with open(input_config, 'r') as f:
@@ -73,7 +73,6 @@ def generate_neuromotion_recording(input_config, output_dir, engine, container, 
     if not os.path.exists(run_script_path):
         raise FileNotFoundError(f"run.sh not found at {run_script_path}")
 
-    
     # Build command with optional cache directory
     cmd = [run_script_path, engine, container, script_path, input_config, run_dir]
     if cache_dir is not None:

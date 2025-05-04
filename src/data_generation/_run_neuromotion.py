@@ -1133,7 +1133,7 @@ if __name__ == '__main__':
     subject_cfg = cfg.SubjectConfiguration
     fibre_density = subject_cfg.FibreDensity
     subject_seed = subject_cfg.SubjectSeed
-    subject_id = subject_cfg.get('SubjectID', f"sub{subject_seed}")
+    subject_id = subject_cfg.get('SubjectID', f"subject_{subject_seed}")
     
     # Create muscle-to-motor-unit mapping from the config
     muscle_mu_map = {}

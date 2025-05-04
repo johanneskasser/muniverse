@@ -2,6 +2,7 @@
 Utility functions and classes for muniverse
 """
 
-from .logging import RunLogger
+from .logging import SimulationLogger, AlgorithmLogger
+from .containers import pull_container, verify_container_engine
 
-__all__ = ['RunLogger'] 
+__all__ = ['SimulationLogger', 'AlgorithmLogger', 'pull_container', 'verify_container_engine'] 

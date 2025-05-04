@@ -38,8 +38,8 @@
       "_description": "Electrode array layout and spacing in the EMG acquisition setup.",
       "InterElectrodeDistance": 4,
       "NElectrodes": 320,
-      "NRows": 32,
-      "NCols": 10
+      "NRows": 10,
+      "NCols": 32
     },
     "FilterProperties": {
       "_description": "Settings for high-pass filtering the simulated EMG signal.",
