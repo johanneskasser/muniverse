@@ -2,9 +2,18 @@ import numpy as np
 from .decomposition_routines import *
 import sys
 
+
 class upper_bound:
+    '''
+    Class for computing an upper bound of convolutive blind source 
+    separation (cBSS) based motor neuron indedification making use 
+    of a known ground-truth.
+
+
+    '''
 
     def __init__(self, config=None, **kwargs):
+        # Default parameters
         self.ext_fact = 12
         self.whitening_method = 'ZCA'
         self.whitening_reg  = 'auto'
@@ -37,7 +46,7 @@ class upper_bound:
         Estimate the spike response of motor neurons given the 
         motor unit action potentials (MUAPs)
 
-        Parameters:
+        Args:
             sig (ndarray): Input (EMG) signal (n_channels x n_samples)
             muaps (ndarray): MUAPs (mu_index x n_channels x duration)
             fsamp (float): Sampling rate of the data (unit: Hz)
@@ -79,7 +88,7 @@ class upper_bound:
         filter corresponds to the column of the extended and whitened MUAP
         that has the highest norm.
 
-        Parameters:
+        Args:
             MUAP (ndarray): Multichannel MUAP (n_channels x duration)
             Z (ndarray): Whitening matrix
 
@@ -103,8 +112,22 @@ class upper_bound:
 
         return(w)
     
+    def _write_pipeline_sidecar(self):
+        """
+        Write the pipeline metadata into a json file.
+
+        """
+        # ToDo
+        pass
+    
 
 class basic_cBSS:
+    '''
+    Class for performing convolutive blind source separation to identify the 
+    spiking activity of motor neurons using the fastICA algorithm. 
+
+    
+    '''
 
     def __init__(self, config=None, **kwargs):
 
@@ -152,7 +175,7 @@ class basic_cBSS:
         """
         Run simple decomposition
 
-        Parameters:
+        Args:
             sig (ndarray): Input (EMG) signal (n_channels x n_samples)
             fsamp (float): Sampling frequency in Hz
 
@@ -229,7 +252,7 @@ class basic_cBSS:
         """
         Fixed-point optimization to maximize sparseness of a source signal.
 
-        Parameters:
+        Args:
             w (np.ndarray): Initial weight vector (n_channels,)
             X (np.ndarray): Whitened signal matrix (n_channels x n_samples)
             B (np.ndarray): Current separation matrix (n_components x n_channels)
@@ -276,6 +299,23 @@ class basic_cBSS:
         return w, k    
     
     def mimimize_covisi(self, w, X,  cov, fsamp):
+        '''
+        Iterativly update a motor unit filter given a set of motor neuron 
+        spike times as long as the coefficient of variance of the interspike
+        intervall decreases.
+
+        Args:
+            - w (np.ndarray): Initial weight vector
+            - X (np.ndarray): Whitened signal matrix (n_channels x n_samples)
+            - cov (float): Coefficient of variance of the initial source
+            - fsamp (float): Sampling rate in Hz
+
+        Returns: 
+            - w (np.ndarray): Optimized weight vector
+            - spikes (np.ndarray): Sample indices of motor neuron discharges 
+            - cov (float): Coefficient of variance of the optimized source
+
+        '''
 
         cov_last = cov + 1
 
