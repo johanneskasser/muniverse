@@ -149,15 +149,7 @@ def decompose_scd(
         try:
             subprocess.run(cmd, check=True, cwd=current_dir)
             print(f"[INFO] Decomposition completed successfully at {run_dir}")
-            logger.set_return_code("run.sh", 0)
-            
-            # Add decomposition step
-            logger.add_processing_step("Decomposition", {
-                "Method": "Swarm Contrastive Decomposition",
-                "Configuration": algo_cfg,
-                "Description": "Run SCD algorithm on preprocessed data"
-            })
-            
+            logger.set_return_code("run.sh", 0)            
         except subprocess.CalledProcessError as e:
             print(f"[ERROR] Decomposition failed: {e}")
             print(f"[ERROR] Command output: {e.output if hasattr(e, 'output') else 'No output'}")
@@ -165,16 +157,16 @@ def decompose_scd(
             logger.set_return_code("run.sh", e.returncode)
             raise
         
-        print(f"[INFO] Results saved to {output_dir}")
+        print(f"[INFO] Results saved to {run_dir}")
         
         # Log output files
-        for root, _, files in os.walk(output_dir):
+        for root, _, files in os.walk(run_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 logger.add_output(file_path, os.path.getsize(file_path))
         
         # Finalize and save the log
-        log_path = logger.finalize(output_dir)
+        log_path = logger.finalize(run_dir)
         print(f"Run log saved to: {log_path}")
         
         return None

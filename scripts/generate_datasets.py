@@ -31,7 +31,7 @@ def process_configs(configs_dir: str, output_dir: str = 'outputs'):
     print(f"Found {len(config_files)} config files to process")
     
     # Process each config file
-    for config_file in config_files:
+    for config_file in config_files[:1]:
         print(f"\nProcessing {config_file.name}...")
         
         try:

@@ -39,12 +39,16 @@ def train(data_path: str, config_path: str, output_dir: str):
     # Load and set config
     with open(config_path, 'r') as f:
         alg_config = json.load(f)
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    alg_config['Config']['device'] = device
     
     # Unpack config into Config dataclass
-    config = Config(**alg_config)
+    config = Config(**alg_config['Config'])
     
     # Set random seed
-    set_random_seed(seed=42)
+    seed = alg_config.get('Seed', 42)
+    set_random_seed(seed=seed)
 
     # Load data
     npy_data = np.load(data_path).T
@@ -57,7 +61,7 @@ def train(data_path: str, config_path: str, output_dir: str):
     model = SwarmContrastiveDecomposition()
     predicted_timestamps, dictionary = model.run(neural_data, config)
 
-    # Save results: TODO convert spikes and predicted sources to suitable format
+    # Save results
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
