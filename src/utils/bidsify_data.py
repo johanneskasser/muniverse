@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import json
@@ -14,7 +15,7 @@ def find_file_by_suffix(data_path, suffix):
 
 def setup_spikes_data(data_path):
     """Load and format spike times"""
-    spikes_file = find_file_by_suffix(data_path, '_spikes.npz')
+    spikes_file = find_file_by_suffix(data_path, '_spikes.npy')
     spikes = np.load(spikes_file, allow_pickle=True)
     
     # Convert to long format DataFrame
@@ -27,8 +28,8 @@ def setup_spikes_data(data_path):
 
 def setup_motor_units_data(data_path):
     """Load and format motor unit properties"""
-    recruitment_file = find_file_by_suffix(data_path, '_recruitment_thresholds.npz')
-    properties_file = find_file_by_suffix(data_path, '_unit_properties.npz')
+    recruitment_file = find_file_by_suffix(data_path, '_recruitment_thresholds.npy')
+    properties_file = find_file_by_suffix(data_path, '_unit_properties.npy')
     
     recruitment_thresholds = np.load(recruitment_file, allow_pickle=True)
     unit_properties = np.load(properties_file, allow_pickle=True)
@@ -46,8 +47,8 @@ def setup_motor_units_data(data_path):
 
 def setup_internals_data(data_path, fsamp):
     """Load and format internal variables"""
-    effort_file = find_file_by_suffix(data_path, '_effort_profile.npz')
-    angle_file = find_file_by_suffix(data_path, '_angle_profile.npz')
+    effort_file = find_file_by_suffix(data_path, '_effort_profile.npy')
+    angle_file = find_file_by_suffix(data_path, '_angle_profile.npy')
     
     effort_profile = np.load(effort_file, allow_pickle=True)
     angle_profile = np.load(angle_file, allow_pickle=True)
@@ -57,6 +58,15 @@ def setup_internals_data(data_path, fsamp):
     
     return edf
 
+def setup_internals_metadata():
+    """Generate internal variables metadata"""
+    return {
+        'name': ['effort_profile', 'angle_profile'],
+        'type': ['force', 'kinematics'],
+        'units': ['AU', 'AU'],
+        'description': ['simulated effort (excitation) profile', 'simulated angle profile']
+    }
+
 def setup_electrode_metadata(config):
     """Generate electrode metadata based on RecordingConfiguration"""
     elec_config = config['RecordingConfiguration']['ElectrodeConfiguration']
@@ -65,6 +75,7 @@ def setup_electrode_metadata(config):
     x_pos = []
     y_pos = []
     coordinate_system = []
+    diameter = []
     
     for i in range(elec_config['NElectrodes']):
         row = i // elec_config['NCols']
@@ -74,12 +85,13 @@ def setup_electrode_metadata(config):
         x_pos.append(col * elec_config['InterElectrodeDistance'])
         y_pos.append(row * elec_config['InterElectrodeDistance'])
         coordinate_system.append("Grid1")
-        
+        diameter.append("2mm")
     return {
         'name': names,
         'x': x_pos,
         'y': y_pos,
-        'coordinate_system': coordinate_system
+        'coordinate_system': coordinate_system,
+        'diameter': diameter
     }
 
 def setup_channel_metadata(config):
@@ -89,16 +101,22 @@ def setup_channel_metadata(config):
     names = []
     types = []
     units = []
+    signal_electrode = []
+    reference_electrode = []
     
     for i in range(elec_config['NElectrodes']):
-        names.append(f"E{i+1}")
+        names.append(f"Ch{i+1}")
         types.append("EMG")
         units.append("mV")
+        signal_electrode.append(f"E{i+1}")
+        reference_electrode.append("n/a")
         
     return {
         'name': names,
         'type': types,
-        'unit': units
+        'unit': units,
+        'signal_electrode': signal_electrode, 
+        'reference_electrode': reference_electrode
     }
 
 def generate_task_name(config):
@@ -109,8 +127,6 @@ def generate_task_name(config):
     movement_type = movement['MovementType']
     movement_dof = movement['MovementDOF']
     effort_level = profile['EffortLevel']
-    subject_id = config['SubjectConfiguration']['SubjectSeed']
-    ncols = config['RecordingConfiguration']['ElectrodeConfiguration']['NCols']
     
     # Base task name with muscle, movement type, and DOF
     task_name = f"{muscle.upper()}{movement_type.lower()}{movement_dof.split('-')[0].lower()}"
@@ -125,8 +141,6 @@ def generate_task_name(config):
     
     # Add effort level and subject ID
     task_name += f"{effort_level}percentmvc"
-    task_name += f"sub{subject_id}"
-    task_name += f"ncol{ncols}"
 
     # Remove any non-alphanumeric characters
     task_name = ''.join(char for char in task_name if char.isalnum())
@@ -138,7 +152,40 @@ def get_subject_name(config):
     subject_id = config['SubjectConfiguration']['SubjectSeed']
     return f"sub-sim{subject_id}"
 
-def neuromotion_to_bids(data_path, root='./', datasetname='simulated-BIDS-dataset'):
+def generate_session_id(ncols):
+    """Generate session ID based on number of columns in electrode array"""
+    if ncols == 32:
+        return 1
+    elif ncols == 10:
+        return 2
+    elif ncols == 5:
+        return 3
+    else:
+        raise ValueError(f"Unsupported number of columns: {ncols}")
+
+def generate_run_id(dataset, subject_name, task_name, session_id):
+    """Generate a unique run ID for the recording"""
+    run_id = 1
+    while run_id < 5:
+        emg_file_path = os.path.join(
+            dataset.root,
+            subject_name,
+            'emg',
+            f'ses-{session_id}',
+            f'{subject_name}_ses-{session_id}_task-{task_name}_run-{run_id:02d}_emg.edf'
+        )
+        if not os.path.exists(emg_file_path):
+            break
+        run_id += 1
+    return run_id
+
+def load_sidecar_files(sidecar_path):
+    """Load BIDS sidecar files from neuromotion.json"""
+    with open(sidecar_path, 'r') as f:
+        sidecars = json.load(f)
+    return sidecars
+
+def neuromotion_to_bids(data_path, sidecar_path, root='./', datasetname='simulated-BIDS-dataset'):
     """
     Convert neuromotion simulation data to BIDS format
     
@@ -161,8 +208,13 @@ def neuromotion_to_bids(data_path, root='./', datasetname='simulated-BIDS-datase
     with open(os.path.join(data_path, run_logs[0]), 'r') as f:
         simulation_config = json.load(f)['SimulationConfiguration']
     
+    # Load sidecar files
+    sidecars = load_sidecar_files(sidecar_path)
+    
     # Create dataset
     dataset = bids_dataset(datasetname=datasetname, root=root)
+    dataset.set_metadata('dataset_sidecar', sidecars['DatasetDescription'])
+    dataset.write()
     
     # Set up subject metadata
     subject_name = get_subject_name(simulation_config)
@@ -173,43 +225,39 @@ def neuromotion_to_bids(data_path, root='./', datasetname='simulated-BIDS-datase
     # Create recording
     task_name = generate_task_name(simulation_config)
     fsamp = simulation_config['RecordingConfiguration']['SamplingFrequency']
+    ncols = simulation_config['RecordingConfiguration']['ElectrodeConfiguration']['NCols']
     
-    # Find a run_id that does not exist
-    run_id = 1
-    while run_id < 5:
-        recording = bids_neuromotion_recording(
-            subject=simulation_config['SubjectConfiguration']['SubjectSeed'],
-            task=task_name,
-            datatype='emg',
-            data_obj=dataset
-        )
-        emg_file_path = recording.datapath + recording.subject_name + '_' + recording.task + '_' + f'run-{run_id:0{recording.n_digits}d}_emg.edf'
-        if not os.path.exists(emg_file_path):
-            break
-        run_id += 1
+    # Generate session and run IDs
+    session_id = generate_session_id(ncols)
+    run_id = generate_run_id(dataset, subject_name, task_name, session_id)
+    
+    # Create recording with new path structure
+    recording = bids_neuromotion_recording(
+        subject=simulation_config['SubjectConfiguration']['SubjectSeed'],
+        task=task_name,
+        datatype='emg',
+        data_obj=dataset,
+        session=session_id,
+        run=run_id
+    )
     
     # Set up metadata
     recording.set_metadata('electrodes', setup_electrode_metadata(simulation_config))
     recording.set_metadata('channels', setup_channel_metadata(simulation_config))
-    recording.set_metadata('coord_sidecar', {'EMGCoordinateSystem': 'local', 'EMGCoordinateUnits': 'mm'})
+    recording.set_metadata('coord_sidecar', sidecars['CoordSystemSidecar'])
     
-    # Set up EMG sidecar
-    emg_sidecar = {
-        'EMGPlacementScheme': 'grid',
-        'EMGReference': 'bipolar',
-        'SamplingFrequency': fsamp,
-        'PowerLineFrequency': 50,
-        'SoftwareFilters': [],
-        'TaskName': f"Muscle: {simulation_config['MovementConfiguration']['TargetMuscle'].upper()}, "
-                   f"Task: {simulation_config['MovementConfiguration']['MovementType'].lower()}, "
-                   f"DoF: {simulation_config['MovementConfiguration']['MovementDOF']}, "
-                   f"Profile: {simulation_config['MovementConfiguration']['MovementProfileParameters']['EffortProfile'].lower()}, "
-                   f"EffortLevel: {simulation_config['MovementConfiguration']['MovementProfileParameters']['EffortLevel']} percent mvc"
-    }
+    # Set up EMG sidecar with simulation-specific modifications
+    emg_sidecar = sidecars['EMGSidecar'].copy()
+    emg_sidecar['SamplingFrequency'] = fsamp
+    emg_sidecar['TaskName'] = f"Muscle: {simulation_config['MovementConfiguration']['TargetMuscle'].upper()}, " \
+                            f"Task: {simulation_config['MovementConfiguration']['MovementType'].lower()}, " \
+                            f"DoF: {simulation_config['MovementConfiguration']['MovementDOF']}, " \
+                            f"Profile: {simulation_config['MovementConfiguration']['MovementProfileParameters']['EffortProfile'].lower()}, " \
+                            f"EffortLevel: {simulation_config['MovementConfiguration']['MovementProfileParameters']['EffortLevel']} percent mvc"
     recording.set_metadata('emg_sidecar', emg_sidecar)
     
     # Set up data
-    emg_file = find_file_by_suffix(data_path, '_emg.npz')
+    emg_file = find_file_by_suffix(data_path, '_emg.npy')
     data = np.load(emg_file, allow_pickle=True)
     recording.set_data('emg_data', data, fsamp)
     
@@ -217,10 +265,12 @@ def neuromotion_to_bids(data_path, root='./', datasetname='simulated-BIDS-datase
     recording.spikes = setup_spikes_data(data_path)
     # recording.motor_units = setup_motor_units_data(data_path)
     recording.internals = setup_internals_data(data_path, fsamp)
-    recording.internals_sidecar = {
-        'SamplingFrequency': fsamp,
-        'Description': 'Simulated internal variables: effort profile and angle profile'
-    }
+    recording.internals_sidecar = setup_internals_metadata()
+    
+    # Add simulation metadata
+    with open(os.path.join(data_path, run_logs[0]), 'r') as f:
+        simulation_metadata = json.load(f)
+    recording.set_metadata('simulation_sidecar', simulation_metadata)
     
     # Write to BIDS format
     recording.write()

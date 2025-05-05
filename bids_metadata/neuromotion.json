@@ -1,0 +1,53 @@
+{
+  "DatasetDescription": {
+    "Name": "MUniverse Neuromotion Test Dataset",
+    "BIDSversion": "extension proposal for electromyography - BEP042",
+    "DatasetType": "raw",
+    "License": "CC0 BY 4.0",
+    "Authors": [
+      "Pranav Mamidanna",
+      "Thomas Klotz",
+      "Dimitrios Halatsis",
+      "Agnese Grison",
+      "Irene Mendez Guerra",
+      "Shihan Ma",
+      "Simon Avrillon",
+      "Robin Rohlen",
+      "Dario Farina"
+    ],
+    "EthicsApprovals": "n/a",
+    "Funding": [],
+    "ReferencesAndLinks": []
+  },
+  
+  "EMGSidecar": {
+    "EMGPlacementScheme": "Bracelet",
+    "EMGReference": "n/a",
+    "SamplingFrequency": 2048,
+    "PowerLineFrequency": "n/a",
+    "SoftwareFilters": { "bandpass filter": { "highpass": 10, "lowpass": 500 } },
+    "TaskName": "FDSI Isometric Flexion-Extension Trapezoidal Contraction at 30% MVC",
+    "EMGElectrodeGroups": {
+      "Bracelet1": {
+      "InterelectrodeDistance": "8 mm",
+      "GridShape": [10, 32],
+      "Material": "Idealized conductor"
+    }
+    },
+    "RecordingDuration": 20,
+    "RecordingType": "Continuous",
+    "EMGChannelCount": 320,
+    "EMGElectrodeCount": 320,
+    "SkinPreparation": "n/a",
+    "TaskDescription": "",
+    "InstitutionName": "Imperial Collage London",
+    "InstitutionAddress": "London SW7 2AZ, United Kingdom",
+    "InstitutionalDepartmentName": "Department of Bioengineering"
+  },
+
+  "CoordSystemSidecar": {
+    "EMGCoordinateSystem": "Other",
+    "EMGCoordinateUnits": "m",
+    "EMGCoordinateSystemDescription": "x:, y:, z:"
+  }
+}

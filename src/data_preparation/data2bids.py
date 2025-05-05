@@ -207,6 +207,7 @@ class bids_emg_recording(bids_dataset):
         self.subject_id = subject
         self.subject_name = subject_name
         self.task = 'task-' + task
+        self.session = session
         self.run = run
         self.datatype = datatype
         self.emg_data = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
@@ -229,6 +230,8 @@ class bids_emg_recording(bids_dataset):
             os.makedirs(self.datapath)
         # Make BIDS compatible file names  
         name = self.datapath + self.subject_name + '_' + self.task + '_'
+        if self.session > 0:
+            name = name + 'ses-' + str(int(self.session)).zfill(self.n_digits) + '_'
         if self.run > 0:
             name = name + 'run-' + str(int(self.run)).zfill(self.n_digits) + '_'
 
@@ -367,8 +370,8 @@ class bids_neuromotion_recording(bids_emg_recording):
         self.spikes = pd.DataFrame(columns=['source_id', 'spike_time'])
         self.motor_units = pd.DataFrame(columns=['source_id', 'recruitment_threshold', 'depth', 'innervation_zone', 'fibre_density', 'fibre_length', 'conduction_velocity', 'angle'])
         self.internals = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
-        self.internals_sidecar = {'SamplingFrequency': [], 'Description': []}
-        self.simulation_sidecar = {'RunId': [], 'SimulationConfiguration': [], 'RuntimeEnvironment': []}
+        self.internals_sidecar = pd.DataFrame(columns=['name', 'type', 'units', 'description'])
+        self.simulation_sidecar = {}
 
     def write(self):
         """Override write method to include simulated data"""
@@ -388,8 +391,7 @@ class bids_neuromotion_recording(bids_emg_recording):
 
         # Write internals data
         self.internals.write(name + 'internals.edf')
-        with open(name + 'internals.json', 'w') as f:
-            json.dump(self.internals_sidecar, f)
+        self.internals_sidecar.to_csv(name + 'internals.tsv', sep='\t', index=False)
 
         # Write simulation sidecar
         with open(name + 'simulation.json', 'w') as f:
