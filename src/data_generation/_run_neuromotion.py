@@ -666,27 +666,23 @@ def generate_emg_signal(muaps, spikes, time_samples, muap_angle_labels, angle_pr
     return emg_raw
 
 
-def select_optimal_electrode_columns(emg, n_rows, n_cols, desired_cols):
+def select_optimal_electrode_columns(emg, desired_cols):
     """
     Selects the optimal subset of electrode columns based on signal energy.
+    TODO: Temporarily hardcoded for 10 rows, 32 columns, native BioMime layout. Can be generalised.
     
     Args:
-        emg (numpy.ndarray): EMG signal with shape (samples, n_rows*n_cols).
-        n_rows (int): Number of rows in the electrode array.
-        n_cols (int): Number of columns in the electrode array.
-        desired_cols (int): Number of columns to select.
+        emg (numpy.ndarray): EMG signal with shape (samples, 10x32).
+        desired_cols (int): Number of columns to select. (Must be < 32)
         
     Returns:
-        tuple: (selected_emg, column_indices, center_column)
+        tuple: (selected_emg, column_indices, center_column, selected_indices)
             - selected_emg: EMG signal with only the selected columns
             - column_indices: Indices of the selected columns
             - center_column: Index of the column with highest RMS
+            - selected_indices: List of indices (0-319) that were selected from the original EMG
     """
-    # Ensure desired columns is not larger than available columns
-    if desired_cols >= n_cols:
-        print(f"Requested {desired_cols} columns, but only {n_cols} available. Using all columns.")
-        return emg, list(range(n_cols)), n_cols // 2
-    
+    n_rows = 10; n_cols = 32
     # Reshape to separate rows and columns
     emg_reshaped = emg.reshape(-1, n_rows, n_cols)
     
@@ -700,39 +696,25 @@ def select_optimal_electrode_columns(emg, n_rows, n_cols, desired_cols):
     # Calculate how many columns to take on each side of the max column
     half_width = desired_cols // 2
     
-    # Handle edge cases
-    if max_col_idx - half_width < 0:
-        # Too clos e to left edge, shift window right
-        start_col = 0
-        end_col = desired_cols
-    elif max_col_idx + half_width >= n_cols:
-        # Too close to right edge, shift window left
-        start_col = n_cols - desired_cols
-        end_col = n_cols
-    else:
-        # Centered around max column
-        start_col = max_col_idx - half_width
-        end_col = start_col + desired_cols
+    # Biomime grid wraps around -- use modulo to handle wrapping
+    selected_cols = [(max_col_idx - half_width + i) % n_cols for i in range(desired_cols)]
     
-    # Select the columns
-    selected_cols = list(range(start_col, end_col))
-    
-    # Reshape EMG and select only the desired columns
+    # Map selected columns to their corresponding indices in the flattened EMG
+    # For each column i, its electrodes are at indices [i*10, i*10+1, ..., i*10+9]
     selected_indices = []
     for col in selected_cols:
         selected_indices.extend([col * n_rows + row for row in range(n_rows)])
     
     selected_emg = emg[:, selected_indices]
-    
-    print(f"Selected columns {start_col} to {end_col-1} (centered around column {max_col_idx})")
+    print(f"Selected columns: {selected_cols}")
+    print(f"Selected indices in flattened EMG: {selected_indices}")
     
     return selected_emg, selected_cols, max_col_idx
 
 
 def generate_muaps(
     model_pth, ms_label, movement_cfg, fs_mov, poses, durations, steps, 
-    device, morph, muap_file, fibre_density, fs, filter_cfg, n_rows, n_cols, 
-    num_mus, subject_seed=None
+    device, morph, muap_file, fibre_density, fs, filter_cfg, num_mus, subject_seed=None
 ):
     """Generate MUAPs for the full range of motion.
     
@@ -750,8 +732,6 @@ def generate_muaps(
         fibre_density (float): Fibre density.
         fs (float): Sampling frequency.
         filter_cfg (easydict.EasyDict): Filter configuration.
-        n_rows (int): Number of rows in electrode array.
-        n_cols (int): Number of columns in electrode array.
         num_mus (int): Number of motor units to generate.
         subject_seed (int, optional): Subject-specific random seed.
         
@@ -1231,9 +1211,7 @@ if __name__ == '__main__':
         # Generate MUAPs with subject-specific seed and MU count
         muaps, num_mus, properties_dict = generate_muaps(
             model_pth, ms_label, movement_cfg, fs_mov, poses, durations, steps,
-            device, morph, muap_file, fibre_density, fs, filter_cfg, n_rows, n_cols,
-            num_mus, subject_seed
-        )
+            device, morph, muap_file, fibre_density, fs, filter_cfg, num_mus, subject_seed)
         
         # Cache the MUAPs for future use if cache_dir is provided
         if use_cache:
@@ -1289,14 +1267,9 @@ if __name__ == '__main__':
     selected_cols = None
     center_column = None
     
-    if desired_cols < n_cols:
-        print(f"Selecting {desired_cols} optimal columns from {n_cols}...")
-        emg, selected_cols, center_column = select_optimal_electrode_columns(
-            emg, 
-            n_rows, 
-            n_cols, 
-            desired_cols
-        )
+    if desired_cols < 32:
+        print(f"Selecting {desired_cols} optimal columns from {32}...")
+        emg, selected_cols, center_column = select_optimal_electrode_columns(emg, desired_cols)
         # Update n_cols to reflect the selected number
         n_cols = desired_cols
     

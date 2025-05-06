@@ -107,14 +107,37 @@ class BaseMetadataLogger:
         except:
             return 0.0
     
-    def set_container_info(self, engine: str, engine_version: str, image: str, image_id: str):
-        """Set container information."""
-        self.log_data["RuntimeEnvironment"]["Container"] = {
-            "Engine": engine,
-            "Engine_version": engine_version,
-            "Image": image,
-            "Image_id": image_id
-        }
+    def _get_container_info(self, engine: str, container: str) -> Dict[str, str]:
+        """Get container information based on the engine type.
+        
+        Args:
+            engine: Container engine ('docker' or 'singularity')
+            container: Container name (for Docker) or full path (for Singularity)
+            
+        Returns:
+            Dict containing container information (name, id, created)
+        """
+        try:
+            # Get container info using inspect
+            inspect_cmd = [engine, "inspect"]
+            if engine == "singularity":
+                inspect_cmd.append("--json")
+            inspect_cmd.append(container)
+            
+            inspect_output = subprocess.check_output(inspect_cmd).decode()
+            inspect_data = json.loads(inspect_output)
+            
+            # Extract info based on engine
+            if engine == "docker":
+                inspect_data = inspect_data[0]  # Docker returns a list
+                return {"name": inspect_data["RepoTags"][0] if inspect_data["RepoTags"] else container, "id": inspect_data["Id"]}
+            else:  # singularity
+                return {"name": os.path.basename(container), "id": inspect_data.get("data", {}).get("attributes", {}).get("id", "unknown")}
+        
+        except Exception as e:
+            print(f"Warning: Could not get {engine} container info: {e}")
+            # Return appropriate name based on engine
+            return {"name": os.path.basename(container) if engine == "singularity" else container, "id": "unknown"}
     
     def set_return_code(self, script_name: str, code: int):
         """Set the return code for a script."""
@@ -128,10 +151,29 @@ class BaseMetadataLogger:
         except:
             return "unknown"
     
-    def finalize(self, output_dir: str) -> str:
-        """Finalize the log and save it to a file."""
+    def finalize(self, output_dir: str, engine: Optional[str] = None, container: Optional[str] = None) -> str:
+        """Finalize the log and save it to a file.
+        
+        Args:
+            output_dir: Directory to save the log file
+            engine: Optional container engine name
+            container: Optional container name/path
+            
+        Returns:
+            Path to the saved log file
+        """
         end_time = datetime.now()
         self.log_data["Execution"]["Timing"]["End"] = end_time.isoformat()
+        
+        # Update container info if engine and container are provided
+        if engine and container:
+            image_info = self._get_container_info(engine, container)
+            self.log_data["RuntimeEnvironment"]["Container"] = {
+                "Engine": engine,
+                "Engine_version": subprocess.check_output([engine, "--version"]).decode().strip(),
+                "Image": image_info["name"],
+                "Image_id": image_info["id"]
+            }
         
         log_path = os.path.join(output_dir, f"{self.run_id}_log.json")
         with open(log_path, "w") as f:
@@ -227,12 +269,13 @@ class SimulationLogger(BaseMetadataLogger):
         
         # Add simulation-specific fields
         self.log_data["InputData"] = {
+            "Description": "Simulation configuration for synthetic EMG generation",
             "Configuration": {},
-            "Description": "Simulation configuration for synthetic EMG generation"
         }
         self.log_data["OutputData"] = {
+            "Description": "Generated synthetic EMG data and metadata",
             "Files": [],
-            "Description": "Generated synthetic EMG data and metadata"
+            "Metadata": {}
         }
         
         # Add MUniverse generator info
