@@ -1,3 +1,5 @@
+
+
 def emg_sidecar_template(ID):
     emg_sidecar = {}
     if ID == 'Caillet2023':
@@ -84,8 +86,12 @@ def dataset_sidecar_template(ID):
              'Larger and Denser: An Optimal Design for Surface Grids of EMG Electrodes to Identify Greater and More Representative Samples of Motor Units. ' +
              'eNeuro, 10(9), ENEURO.0064-23.2023.'),
             'https://doi.org/10.1523/ENEURO.0064-23.2023',
-            'https://doi.org/10.6084/m9.figshare.22149287'
         ]
+        dataset_sidecar['GeneratedBy'] = [
+            {'Name': 'muniverse', 'Version': '0.1.0', 'CodeURL': 'https://github.com/xxx'},
+            {'Name': 'caillet2023_to_bids', 'Description': 'Semi-automated conversion of the original data into BIDS format'}
+        ]
+        dataset_sidecar['SourceDatasets'] = [{'URL': 'https://doi.org/10.6084/m9.figshare.22149287', 'Version': '2023-08-08'}]
     else:     
         dataset_sidecar['Name'] = 'n/a'
         dataset_sidecar['BIDSversion'] = 'n/a'
