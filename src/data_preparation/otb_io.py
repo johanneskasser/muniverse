@@ -53,8 +53,6 @@ def open_otb(inputname,ngrid):
     emg_data = np.transpose(emg_data.reshape(int(len(emg_data)/nchans),nchans)) # need to reshape because it is read as a stream
     emg_data = emg_data.astype(float)
 
-    # initalize data vector
-    data = np.zeros((emg_data.shape[1], ngrid*64+len(sip_files)))
 
     # initalize vector of recorded units
     ch_units = []
@@ -63,6 +61,9 @@ def open_otb(inputname,ngrid):
     n_channels = 0
     for i in range(ngrid):
         n_channels += int(adapter_info[i+1].attrib['ChannelStartIndex']) - int(adapter_info[i].attrib['ChannelStartIndex'])
+
+    # initalize data vector
+    data = np.zeros((emg_data.shape[1], n_channels+len(sip_files)))
 
     # convert the data from bits to microvolts
     for i in range(n_channels):
@@ -87,7 +88,7 @@ def open_otb(inputname,ngrid):
         trial_label_sip = os.path.join(temp_dir, sip_files[i])
         aux_data = np.fromfile(open(trial_label_sip),dtype='float64')
         aux_data = aux_data[0:data.shape[0]]
-        data[:,i+ngrid*64] = aux_data
+        data[:,i+n_channels] = aux_data
 
     # Get the subject info
     with open(os.path.join(temp_dir, 'patient.xml'), encoding='utf-8') as file:
@@ -155,7 +156,7 @@ def format_otb_channel_metadata(data,metadata,ngrids):
             tmp = tmp.split('Array ')[-1]
             tmp = tmp.split((' i.e.d.'))[0]
             interelectrode_distance.append(tmp)
-            description.append('Monopolar EMG')
+            description.append('EMG')
 
     # Loop over non-EMG channels
     for i in np.arange(len(metadata['aux_info'])):
