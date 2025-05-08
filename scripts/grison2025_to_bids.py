@@ -65,10 +65,12 @@ n_sub = 1
 # Number of trials
 n_mvc = 1
 
-sourcepath = str(Path.home()) + '/Downloads/grison_benchmark_dataset/'
+mvc_levels = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70]
 
-subjects_data = {'name': ['sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06'], 
-            'sex': ['M', 'M', 'M', 'M', 'M', 'M']}
+sourcepath = str(Path.home()) + '/Downloads/S1/'
+
+subjects_data = {'name': ['sub-01'], 
+            'sex': ['unknown']}
 dataset_sidecar = manual_metadata["DatasetDescription"] #dataset_sidecar_template(ID='Caillet2023')
 
 Caillet_2023 = bids_dataset(datasetname='Grison_et_al_2025', root='./')
@@ -77,9 +79,9 @@ Caillet_2023.set_metadata(field_name='dataset_sidecar', source=dataset_sidecar)
 Caillet_2023.write()
 
 for i in np.arange(n_sub):
-    for j in np.arange(n_mvc):
+    for j in np.arange(len(mvc_levels)):
 
-        task = 'isometric'
+        task = 'isometric' + str(mvc_levels[j]) + 'percentmvc'
         # # There is no 50 percent MVC for the second subject
         # if i==1 and j==1:
         #     continue
@@ -96,7 +98,7 @@ for i in np.arange(n_sub):
 
         # Import daata from otb+ file
         ngrids = 9
-        fname =  sourcepath + '10mvc_semg.otb+'
+        fname =  sourcepath + str(mvc_levels[j]) + '/' + str(mvc_levels[j]) + 'mvc_semg.otb+'
         (data, metadata) = open_otb(fname, ngrids)
 
         # Get and write channel metadata

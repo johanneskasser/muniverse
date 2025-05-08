@@ -34,7 +34,7 @@ def open_otb(inputname,ngrid):
     trial_label_xml = trial_label_sig.split('.')[0] + '.xml'
     trial_label_sig = os.path.join(temp_dir, trial_label_sig)
     trial_label_xml = os.path.join(temp_dir, trial_label_xml)
-    sip_files = [f for f in os.listdir(temp_dir) if f.endswith('.sip')]
+    sip_files = [f for f in os.listdir(temp_dir) if f.endswith('.pro')]
 
     # read the metadata xml file 
     with open(trial_label_xml, encoding='utf-8') as file:
@@ -85,7 +85,10 @@ def open_otb(inputname,ngrid):
         ch_units.append(aux_info[i]['unity_of_measurement'])
         
         # get data
-        trial_label_sip = os.path.join(temp_dir, sip_files[i])
+        trial_label_sip = sip_files[i]
+        trial_label_sip = trial_label_sip.split('.')[0] + '.sip'
+        trial_label_sip = os.path.join(temp_dir, trial_label_sip)
+        #trial_label_sip = os.path.join(temp_dir, sip_files[i])
         aux_data = np.fromfile(open(trial_label_sip),dtype='float64')
         aux_data = aux_data[0:data.shape[0]]
         data[:,i+n_channels] = aux_data
@@ -138,16 +141,19 @@ def format_otb_channel_metadata(data,metadata,ngrids):
     interelectrode_distance = []
     description = []
 
+    electrode_idx = 0
+
     # Loop over all EMG channels
     for i in np.arange(ngrids):    
         channel_metadata = metadata['adapter_info'][i].findall('.//Channel')
         n_channels = int(metadata['adapter_info'][i+1].attrib['ChannelStartIndex']) - int(metadata['adapter_info'][i].attrib['ChannelStartIndex'])
         for j in np.arange(n_channels):
+            electrode_idx += 1
             ch_type.append('EMG')
             low_cutoff.append(int(metadata['adapter_info'][i].attrib['LowPassFilter']))
             high_cutoff.append(int(metadata['adapter_info'][i].attrib['HighPassFilter']))
             sampling_frequency.append(int(metadata['device_info']['SampleFrequency']))
-            signal_electrode.append('E' + str(j+1))
+            signal_electrode.append('E' + str(electrode_idx))
             grid_name.append(channel_metadata[j].attrib['ID'])
             group.append('Grid'+ str(i+1))
             reference.append('R1')
@@ -156,7 +162,7 @@ def format_otb_channel_metadata(data,metadata,ngrids):
             tmp = tmp.split('Array ')[-1]
             tmp = tmp.split((' i.e.d.'))[0]
             interelectrode_distance.append(tmp)
-            description.append('EMG')
+            description.append('ElectroMyoGraphy')
 
     # Loop over non-EMG channels
     for i in np.arange(len(metadata['aux_info'])):
