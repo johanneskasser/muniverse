@@ -332,8 +332,8 @@ class basic_cBSS:
         # Use g(x)=x*(x**2+epsilon)**((a-1)/2) as smooth approximation of g(x) = sign(x) * abs(x)**a
         epsilon = 1e-3
         a = self.opt_function_exp
-        g = lambda x: (epsilon+x**2)**(a-3/2) * (2*a*x**2 + epsilon)
-        gp = lambda x: (2*a-1)*x * (epsilon+x**2)**(a-5/2) * (2*a*x**2 + 3*epsilon)
+        g = lambda x: (epsilon+x**2)**((a-3)/2) * (a*x**2 + epsilon)
+        gp = lambda x: (a-1)*x * (epsilon+x**2)**((a-5)/2) * (a*x**2 + 3*epsilon)
         #g = lambda x: x**2
         #gp = lambda x: 2*x
 

@@ -95,7 +95,7 @@ def whitening(Y, method='ZCA', backend='eig', regularization='auto', eps=1e-10):
 
     return wY, Z
 
-def est_spike_times(sig, fsamp, cluster = 'kmeans', a = 2):
+def est_spike_times(sig, fsamp, cluster = 'kmeans', a = 2, min_delay = 0.02):
     """
     Estimate spike indices given a motor unit source signal and compute
     a silhouette-like metric for source quality quantification
@@ -118,7 +118,7 @@ def est_spike_times(sig, fsamp, cluster = 'kmeans', a = 2):
     if cluster == 'kmeans':
     
         # Detect peaks with minimum distance of 10 ms
-        min_peak_dist = int(round(fsamp * 0.01))
+        min_peak_dist = int(round(fsamp * min_delay))
         peaks, _ = find_peaks(sig, distance=min_peak_dist)
 
         if len(peaks) == 0:
@@ -209,7 +209,7 @@ def remove_duplicates(sources, spikes, sil, fsamp, max_shift=0.1, tol=0.001, thr
     unique_labels = np.unique(new_labels[np.isfinite(new_labels)])
     new_sources  = np.zeros((len(unique_labels),sources.shape[1]))
     new_spikes = {i: [] for i in range(len(unique_labels))}
-    new_sil = np.zeros(len(new_labels))
+    new_sil = np.zeros(len(unique_labels))
 
     # 
     for i in np.arange(len(unique_labels)):
