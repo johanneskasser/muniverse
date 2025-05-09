@@ -280,7 +280,7 @@ class basic_cBSS:
                 w = np.random.randn(white_sig.shape[0])
             elif self.opt_initalization == 'activity_idx':
                 col_norms = np.linalg.norm(white_sig, axis=0)
-                col_norms[act_idx_histoty] = 0
+                col_norms[np.where(act_idx_histoty>0)] = 0
                 best_idx = np.argmax(col_norms)
                 w = white_sig[:, best_idx]
                 act_idx_histoty[i] = best_idx
@@ -288,7 +288,7 @@ class basic_cBSS:
                 ValueError('The specified initalization method is not implemented')
 
             # fastICA fixedpoint optimization
-            w, _ = self.my_fixed_point_alg(w, white_sig, B)
+            w, k = self.my_fixed_point_alg(w, white_sig, B)
 
             # Predict source and estimate the source quality
             sources[i,:] = w.T @ white_sig
@@ -334,6 +334,8 @@ class basic_cBSS:
         a = self.opt_function_exp
         g = lambda x: (epsilon+x**2)**(a-3/2) * (2*a*x**2 + epsilon)
         gp = lambda x: (2*a-1)*x * (epsilon+x**2)**(a-5/2) * (2*a*x**2 + 3*epsilon)
+        #g = lambda x: x**2
+        #gp = lambda x: 2*x
 
         TOL = self.opt_tol
         delta = np.ones(self.opt_max_iter)

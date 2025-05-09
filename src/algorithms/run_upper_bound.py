@@ -15,15 +15,15 @@ emg_data  = loadmat(datapath + 'mvc_experiments/muscle_2_f5mm_low_mvc.mat', stru
 
 MUAPs = muap_data['motor_unit_responses'].HD_sEMG.MUEP_data
 SIG = emg_data['data'].HD_sEMG.emg_data
-SIG = np.concatenate((SIG,SIG,SIG,SIG,SIG,SIG,SIG,SIG,SIG,SIG),axis=1)
+#SIG = np.concatenate((SIG,SIG,SIG,SIG,SIG,SIG,SIG,SIG,SIG,SIG),axis=1)
 fsamp = 2000
 
-UB = upper_bound()
-UB.ext_fact = 40
-ipts, predicted_spikes, sil = UB.decompose(SIG, MUAPs[:70,:,:], fsamp)
+#UB = upper_bound()
+#UB.ext_fact = 40
+#sources, predicted_spikes, sil = UB.decompose(SIG, MUAPs[:70,:,:], fsamp)
 
 cBSS = basic_cBSS()
-ipts, predicted_spikes, sil = cBSS.decompose(SIG, fsamp)
+sources, predicted_spikes, sil = cBSS.decompose(SIG, fsamp)
 
 
 
