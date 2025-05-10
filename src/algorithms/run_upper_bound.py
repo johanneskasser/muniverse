@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 #sys.path.append('../evaluation/')
 from ..evaluation.evaluate import *
 from pathlib import Path
+import time
 
 datapath = str(Path.home()) + '/Documents/CBM/simulation_data/RESULTS_2023_05/'
 
@@ -23,8 +24,10 @@ fsamp = 2000
 #sources, predicted_spikes, sil = UB.decompose(SIG, MUAPs[:70,:,:], fsamp)
 
 cBSS = basic_cBSS()
+start = time.time()
 sources, predicted_spikes, sil = cBSS.decompose(SIG, fsamp)
-
+end = time.time()
+print(f"Runtime: {end - start:.6f} seconds")
 
 
 print('done')
