@@ -7,17 +7,17 @@ MUSCLE_LABELS = ["ECRB", "ECRL", "ECU", "EDI", "PL", "FCU", "FDSI"]
 MOVEMENT_DOFS = ["Flexion-Extension", "Radial-Ulnar-deviation"]
 MOVEMENT_PROFILES = ["Trapezoid_Isometric", "Triangular_Isometric", "Ballistic_Isometric", "Sinusoid_Isometric", "Triangular_Dynamic", "Sinusoid_Dynamic"]
 NCOL_CHOICES = [5, 10, 32]
-MOVEMENT_ANGLE_RANGES = [(-65, 65), (-10, 25)]
+MOVEMENT_ANGLE_RANGES = [(-65, 65), (-10, 25)] # in degrees
 
 MOVEMENT_DOF_PROBS = [0.65, 0.35]
-MOVEMENT_PROFILE_PROBS = [0.5*0.7, 0.125*0.7, 0.125*0.7, 0.25*0.7, 0.5*0.3, 0.5*0.3] # p(Trapezoid/Triangular/Ballistic/Sinusiod)xp(isometric/dynamic)
+MOVEMENT_PROFILE_PROBS = [0.5*0.65, 0.125*0.65, 0.125*0.65, 0.25*0.65, 0.5*0.35, 0.5*0.35] # p(Trapezoid/Triangular/Ballistic/Sinusiod)xp(isometric/dynamic)
 
 # Mean and std number of motor units for each muscle
 NUM_MUS = {'ECRB': 186, 'ECRL': 204, 'ECU': 180, 'EDI': 186, 'PL': 164, 'FCU': 422, 'FDSI': 158}
-STD_MUS = {muscle: int(mean * 0.1) for muscle, mean in NUM_MUS.items()}
+STD_MUS = {muscle: int(mean * 0.15) for muscle, mean in NUM_MUS.items()}
 
 COMMON_PARAM_RANGES = {
-    "SubjectSeed": (0, 5),          # index, unitless (int)
+    "SubjectSeed": (0, 10),          # index, unitless (int)
     "TargetMuscle": (0, 7),         # index, unitless (int)
     "MovementDOF": (0, 2),          # index, unitless (int)    
     "NCols": (0, 3),                # unitless (int)
@@ -59,14 +59,15 @@ PARAM_RANGES_SINUSOID_DYN = {
     "TargetAngleDirection": (0, 1),        # index, unitless (int)
     "SinFrequency": (0.025, 0.5),          # Hz (float) - range equivalent to 40s to 2s period
     "SinAmplitude": (0.1, 0.5),            # % max angle for DOF (float)
+    "HoldDuration": (10, 30),                # s (float)
 }
 
 PARAM_RANGES_TRIANGULAR_DYN = {
     "EffortLevel": (5, 80),                # % MVC (int)
     "TargetAnglePercentage": (0.3, 1),     # % maximum angle per DOF (float)
     "TargetAngleDirection": (0, 1),        # index, unitless (int)
-    "RampDuration": (1, 20),               # s (float)
-    "NRepetitions": (1, 10),               # unitless, (int)
+    "RampDuration": (1, 6),               # s (float)
+    "NRepetitions": (1, 5),               # unitless, (int)
 }
 
 PROFILE_PARAMS = {
@@ -165,11 +166,14 @@ def update_template(template, params):
     
     elif movement_profile == "Triangular_Dynamic":
         template_profile["AngleProfile"] = "Triangular"
-        template_profile["RampDuration"] = 1
+        template_profile["HoldDuration"] = 0
+        template_profile["RampDuration"] = round(params["RampDuration"])
         template_profile["NRepetitions"] = round(params["NRepetitions"])
 
     elif movement_profile == "Sinusoid_Dynamic":
         template_profile["AngleProfile"] = "Sinusoid"
+        template_profile["HoldDuration"] = round(params["HoldDuration"])
+        template_profile["RampDuration"] = 1
         template_profile["SinFrequency"] = float(params["SinFrequency"])
         template_profile["SinAmplitude"] = angle_sin_amplitude
 

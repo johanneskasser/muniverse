@@ -385,22 +385,9 @@ def generate_angle_profile(fs, movement_duration, profile_params, movement_dof, 
         
         elif profile_params.AngleProfile == "Sinusoid":
             # Sinusoidal angle variation
-            target_angle_percentage = getattr(profile_params, 'TargetAnglePercentage', 0.75)
-            target_angle_direction = getattr(profile_params, 'TargetAngleDirection', 1)
-            sin_amplitude_ratio = getattr(profile_params, 'SinAmplitude', 0.3)
+            target_angle = getattr(profile_params, 'TargetAngle', 0)
+            sin_amplitude = getattr(profile_params, 'SinAmplitude', 0.3)
             sin_frequency = getattr(profile_params, 'SinFrequency', 0.2)
-
-            # Calculate full range
-            angle_range = max_angle - min_angle
-
-            # Determine base (target) angle
-            if target_angle_direction == 0:
-                target_angle = min_angle + angle_range * target_angle_percentage
-            else:
-                target_angle = max_angle - angle_range * target_angle_percentage
-
-            # Calculate absolute sinusoidal amplitude (in degrees/radians)
-            sin_amplitude = angle_range * sin_amplitude_ratio
 
             # Time vector
             t = np.arange(round(fs * movement_duration)) / fs
@@ -410,50 +397,30 @@ def generate_angle_profile(fs, movement_duration, profile_params, movement_dof, 
 
             # Clip profile to stay within the physical limits
             angle_profile = np.clip(angle_profile, min_angle, max_angle)
-        elif profile_params.AngleProfile == "Ramp":
-            # Ramp angle variation (linear change between start and end angles)
-            start_angle = getattr(profile_params, 'StartAngle', min_angle)
-            end_angle = getattr(profile_params, 'EndAngle', max_angle)
-            
-            # Create linear ramp
-            angle_profile = np.linspace(start_angle, end_angle, round(fs * movement_duration))
                 
         elif profile_params.AngleProfile == "Triangular":
-            target_angle_percentage = getattr(profile_params, 'TargetAnglePercentage', 0.8)
-            target_angle_direction = getattr(profile_params, 'TargetAngleDirection', 1)
-            ramp_duration = getattr(profile_params, 'RampDuration', 5)  # in seconds
+            target_angle = getattr(profile_params, 'TargetAngle', 0)
+            rest_duration = getattr(profile_params, 'RestDuration', 0)
+            ramp_duration = getattr(profile_params, 'RampDuration', 5)
             n_repetitions = getattr(profile_params, 'NRepetitions', 3)
 
-            # Total number of samples
-            total_samples = round(fs * movement_duration)
-            
-            # Compute angle range and target angle
-            angle_range = max_angle - min_angle
-            if target_angle_direction == 0:
-                target_angle = min_angle + angle_range * target_angle_percentage
-            else:
-                target_angle = max_angle - angle_range * target_angle_percentage
-
             # One ramp: up and down (triangle wave), duration is 2 * ramp_duration
-            samples_per_cycle = round(fs * 2 * ramp_duration)
+            rest_samples = round(fs * rest_duration)
+            ramp_samples = round(fs * ramp_duration)
             
             # Generate one cycle
-            up_ramp = np.linspace(min_angle, target_angle, samples_per_cycle // 2)
-            down_ramp = np.linspace(target_angle, min_angle, samples_per_cycle // 2)
-            single_cycle = np.concatenate([up_ramp, down_ramp])
+            one_contraction = np.concatenate([
+                np.zeros(rest_samples),
+                np.linspace(0, target_angle, ramp_samples),
+                np.linspace(target_angle, 0, ramp_samples),
+                np.zeros(rest_samples)
+            ])
             
             # Repeat the cycle
-            angle_profile = np.tile(single_cycle, n_repetitions)
+            angle_profile = np.tile(one_contraction, n_repetitions)
             
             # Clip or pad to fit total duration
-            if len(angle_profile) < total_samples:
-                pad_len = total_samples - len(angle_profile)
-                angle_profile = np.pad(angle_profile, (0, pad_len), mode='edge')
-            else:
-                angle_profile = angle_profile[:total_samples]
-        else:
-            # Default to constant profile at 0 degrees if profile type not recognized
-            angle_profile = np.ones(round(fs * movement_duration)) * 0
+            angle_profile = _adjust_duration(fs, movement_duration, angle_profile)
     else:
         # Default to constant profile at 0 degrees if no profile specified
         angle_profile = np.ones(round(fs * movement_duration)) * 0
