@@ -138,19 +138,29 @@ class bids_dataset:
         files = list(root.rglob(f'*{extension}'))
         filenames = [f.name for f in files]
         paths = [f.resolve() for f in files]
-        columns = ['sub', 'task', 'run', 'data_type', 'file_format', 'file_path']
+        columns = ['sub', 'ses', 'task', 'run', 'data_type', 'file_format', 'file_path']
         df = pd.DataFrame(np.nan, index=range(len(filenames)), columns=columns)
-        df = df.astype({"sub": "string", "task": "string", "run": "string", 
+        df = df.astype({"sub": "string", "ses": "string", "task": "string", "run": "string", 
                         "data_type": "string", "file_format": "string", "file_path": "string"})
+        
+        # TODO some checks for testing for valid file names / extensions
 
         for i in np.arange(len(filenames)):
             splitname = filenames[i].split('_')
-            df.loc[i, 'sub'] = splitname[0].split('-')[1]
-            df.loc[i, 'task'] = splitname[1].split('-')[1]
-            df.loc[i, 'run'] = splitname[2].split('-')[1]
-            df.loc[i, 'data_type'] = splitname[3].split('.')[0]
-            df.loc[i, 'file_format'] = splitname[3].split('.')[1]
             df.loc[i, 'file_path'] = str(paths[i].parent)
+            if splitname[1].split('-')[0] == 'ses':
+                df.loc[i, 'sub'] = splitname[0].split('-')[1]
+                df.loc[i, 'ses'] = splitname[1].split('-')[1]
+                df.loc[i, 'task'] = splitname[2].split('-')[1]
+                df.loc[i, 'run'] = splitname[3].split('-')[1]
+                df.loc[i, 'data_type'] = splitname[4].split('.')[0]
+                df.loc[i, 'file_format'] = splitname[4].split('.')[1]
+            else:        
+                df.loc[i, 'sub'] = splitname[0].split('-')[1]
+                df.loc[i, 'task'] = splitname[1].split('-')[1]
+                df.loc[i, 'run'] = splitname[2].split('-')[1]
+                df.loc[i, 'data_type'] = splitname[3].split('.')[0]
+                df.loc[i, 'file_format'] = splitname[3].split('.')[1]
 
         return df    
 
