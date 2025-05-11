@@ -302,7 +302,7 @@ def decompose_cbss(
     
     # Initialize and run CBSS
     cbss = basic_cBSS(config=algo_cfg)
-    sources, spikes, mu_filters = cbss.decompose(data, fsamp=2048)  # TODO: Make sampling frequency configurable
+    sources, spikes, sil, mu_filters = cbss.decompose(data, fsamp=2048)  # TODO: Make sampling frequency configurable
     
     # Add decomposition step
     logger.add_processing_step("Decomposition", {
@@ -315,6 +315,7 @@ def decompose_cbss(
     results = {
         'sources': sources,
         'spikes': spikes,
+        'sil': sil,
         'mu_filters': mu_filters
     }
     
