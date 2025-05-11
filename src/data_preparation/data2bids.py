@@ -4,6 +4,7 @@ import json
 import pandas as pd
 from edfio import Edf, EdfSignal, read_edf
 from pathlib import Path
+import re
     
 class bids_dataset:
 
@@ -499,7 +500,20 @@ class bids_emg_recording(bids_dataset):
         # Set data 
         setattr(self, field_name, edf)
 
-        return()                  
+        return()
+
+    def read_data_frame(self, df, idx):
+        self.subject_name = 'sub-' + df.loc[idx, 'sub']
+        self.subject_id = int(re.search(r'\d+', df.loc[idx, 'sub']).group())
+        self.task = 'task-' + df.loc[idx, 'task']
+        self.datatype = df.loc[idx, 'data_type']
+        self.run = int(df.loc[idx,'run'])
+        self.datapath = df.loc[idx, 'file_path'] + '/'
+        if pd.isna(df.loc[0, 'ses']):
+            self.session = -1
+        else:
+            self.session = int(df.loc[idx, 'ses']) # TODO catch if session odes not exist
+        pass                  
 
 
 
