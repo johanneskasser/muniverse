@@ -363,12 +363,9 @@ def process_recording(edf_path: Path, output_dir: Path, algorithm_config: str,
 
 def main():
     parser = argparse.ArgumentParser(description='Decompose EMG recordings using SCD or CBSS algorithm')
-    parser.add_argument('--dataset_name', default='Caillet_et_al_2023',
-                      help='Name of the dataset to process')
-    parser.add_argument('-a', '--algorithm', choices=['scd', 'cbss'], default='scd',
-                      help='Algorithm to use for decomposition')
-    parser.add_argument('--container', default=None,
-                      help='Path to Singularity container (only needed for SCD)')
+    parser.add_argument('-d', '--dataset_name', help='Name of the dataset to process')
+    parser.add_argument('-a', '--algorithm', choices=['scd', 'cbss'], help='Algorithm to use for decomposition')
+    parser.add_argument('--container', help='Path to Singularity container (only needed for SCD)')
     parser.add_argument('--min_id', type=int, default=0,
                       help='Minimum ID to process (inclusive)')
     parser.add_argument('--max_id', type=int, default=None,
