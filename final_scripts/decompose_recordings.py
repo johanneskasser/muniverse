@@ -365,7 +365,6 @@ def main():
     parser = argparse.ArgumentParser(description='Decompose EMG recordings using SCD or CBSS algorithm')
     parser.add_argument('-d', '--dataset_name', help='Name of the dataset to process')
     parser.add_argument('-a', '--algorithm', choices=['scd', 'cbss'], help='Algorithm to use for decomposition')
-    parser.add_argument('--container', help='Path to Singularity container (only needed for SCD)')
     parser.add_argument('--min_id', type=int, default=0,
                       help='Minimum ID to process (inclusive)')
     parser.add_argument('--max_id', type=int, default=None,
@@ -380,13 +379,10 @@ def main():
 
     SCD_CONFIG = f'/rds/general/user/pm1222/home/muniverse-demo/configs/scd.json'
     CBSS_CONFIG = f'/rds/general/user/pm1222/home/muniverse-demo/configs/cbss.json'    
-    CONTAINER = args.container or f'/rds/general/user/pm1222/home/muniverse-demo/environment/muniverse_scd.sif'
+    CONTAINER = '/rds/general/user/pm1222/home/muniverse-demo/environment/muniverse_scd.sif'
     
     # Set default config and container based on algorithm choice
-    if args.algorithm_config is None:
-        args.algorithm_config = SCD_CONFIG if args.algorithm == 'scd' else CBSS_CONFIG
-    if args.algorithm == 'scd' and args.container is None:
-        args.container = CONTAINER
+    algorithm_config = SCD_CONFIG if args.algorithm == 'scd' else CBSS_CONFIG
     
     # Convert paths to Path objects
     bids_root = Path(BIDS_ROOT)
@@ -416,8 +412,8 @@ def main():
         process_recording(
             edf_path=Path(row['edf_path']),
             output_dir=output_dir,
-            algorithm_config=args.algorithm_config,
-            container=args.container,
+            algorithm_config=algorithm_config,
+            container=CONTAINER,
             data_type=row['data_type'],
             data_config_path=Path(row['log_config_path']) if row['data_type'] == 'simulated' else None,
             algorithm=args.algorithm
