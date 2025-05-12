@@ -149,6 +149,7 @@ class bids_dataset:
         for i in np.arange(len(filenames)):
             splitname = filenames[i].split('_')
             df.loc[i, 'file_path'] = str(paths[i].parent)
+            df.loc[i, 'file_name'] = str(paths[i])
             if splitname[1].split('-')[0] == 'ses':
                 df.loc[i, 'sub'] = splitname[0].split('-')[1]
                 df.loc[i, 'ses'] = splitname[1].split('-')[1]
@@ -635,57 +636,66 @@ class bids_decomp_derivatives(bids_emg_recording):
                  root = './',
                  overwrite = False,              
                  n_digits = 2):
-      
-        super().__init__(
-            subject=subject, 
-            task = task, 
-            datatype = datatype, 
-            session = session, 
-            run = run,
-            data_obj = None,
-            root = root,
-            datasetname = datasetname,
-            overwrite = overwrite,
-            n_digits = n_digits
-        )
+        
 
+        # Check if the function arguments are valid
+        if type(subject) is not int or subject > 10**n_digits-1:
+            raise ValueError('invalid subject ID')
+        
+        if type(session) is not int or session > 10**n_digits-1:
+            raise ValueError('invalid session ID')
+        
+        if type(run) is not int or run > 10**n_digits-1:
+            raise ValueError('invalid session ID')
+        
+        if datatype not in ['emg']:
+            raise ValueError('datatype must be emg')
+
+        # Process name and session input
+        subject_name = 'sub' + '-' + str(subject).zfill(n_digits)
+        if session < 0:
+            datapath = subject_name + '/' + datatype + '/'
+        else:
+            ses_name = 'ses' + '-' + str(session).zfill(n_digits)
+            datapath = subject_name + '/' + ses_name + '/' + datatype + '/'
+        
+        # Store essential information for BIDS compatible folder structure in a dictonary
+        self.datapath = datapath
+        self.subject_id = subject
+        self.subject_name = subject_name
+        self.task = 'task-' + task
+        self.session = session
+        self.overwrite = overwrite
+        self.n_digits = n_digits
+        self.run = run
+        self.datatype = datatype
+      
         if isinstance(data_obj, bids_emg_recording):
             self.root = data_obj.root
             self.datasetname = data_obj.datasetname
-            self.datapath = data_obj.datapath
             self.n_digits = data_obj.n_digits
             self.subject_id = data_obj.subject_id
             self.subject_name = data_obj.subject_name
             self.task = data_obj.task
             self.run = data_obj.task
             self.datatype = data_obj.datatype
-            self.emg_data = data_obj.emg_data
-            self.channels = data_obj.channels
-            self.electrodes = data_obj.electrodes
-            self.emg_sidecar = data_obj.emg_sidecar
-            self.coord_sidecar = data_obj.coord_sidecar
-            self.dataset_sidecar = data_obj.dataset_sidecar
-            self.subjects_data = data_obj.subjects_data
-            self.subjects_sidecar = data_obj.subjects_sidecar
-
+            
 
         # Store essential information for BIDS compatible folder structure in a dictonary
         if format == 'standalone':
-            self.datasetname = self.datasetname + '-' + pipelinename
+            self.datasetname = datasetname + '-' + pipelinename
             self.derivative_root = root + self.datasetname + '/'
-            self.derivative_datapath = self.derivative_root + self.subject_name + '/' + self.datatype + '/' 
+            
         else:
-            self.derivative_root = self.root + + 'derivatives/' + pipelinename + '/'
-            self.derivative_datapath = self.derivative_root + self.subject_name + './' + self.datatype + '/' 
+            self.datasetname = datasetname
+            self.derivative_root = root +  datasetname + '/derivatives/' + pipelinename + '/' 
 
+        self.derivative_datapath = self.derivative_root + datapath 
         self.pipelinename = pipelinename
 
         self.source = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
-        self.spikes = pd.DataFrame(columns=['source_id', 'spike_time'])
-        self.pipeline_sidecar = {'PipelineName': pipelinename, 
-                                 'PipelineParameters': [],
-                                 'PipelineDescription': [], 
-                                 'SamplingFrequency': []}
+        self.spikes = pd.DataFrame(columns=['unit_id', 'spike_time', 'timestamp'])
+        self.pipeline_sidecar = {'PipelineName': pipelinename}
         self.dataset_sidecar = {'Name': datasetname + '_' + pipelinename, 
                                 'BIDSversion': self._get_bids_version(), 
                                 'GeneratedBy': pipelinename} 
