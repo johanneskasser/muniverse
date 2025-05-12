@@ -281,7 +281,7 @@ def pseudo_sil_score(source, spikes, fsamp, min_peak_dist=0.01, match_dist=0.001
     # Step 2: Exclude predicted spikes ± match_window
     mask = np.ones(len(detected_peaks), dtype=bool)
     for spike in spikes:
-        mask &= np.abs(detected_peaks - spike[:, None]) > match_window
+        mask &= np.abs(detected_peaks - spike) > match_window
 
     background_spikes = detected_peaks[mask]
 
@@ -292,8 +292,9 @@ def pseudo_sil_score(source, spikes, fsamp, min_peak_dist=0.01, match_dist=0.001
     pred_amps = source[spikes].reshape(-1, 1)
     back_amps = source[background_spikes].reshape(-1, 1)
 
-    within = np.sum(cdist(pred_amps, pred_amps, metric='sqeuclidean')) if len(pred_amps) > 1 else 0.0
-    between = np.sum(cdist(pred_amps, back_amps, metric='sqeuclidean'))
+    centroids = [np.mean(pred_amps), np.mean(back_amps)]
+    within = np.sum((pred_amps  - centroids[0])**2) if len(pred_amps) > 1 else 0.0
+    between = np.sum((pred_amps  - centroids[1])**2)
 
     sil = (between - within) / max(between, within) if max(between, within) > 0 else 0.0
     return sil
@@ -327,9 +328,10 @@ def summarize_signal_based_metrics(sources, df, fsamp):
     results = []
 
     for i in np.arange(len(unique_labels)):
-        spikes = df[df['unit_id'] == unique_labels[i]]['spike_time'].values
-        cov_isi, mean_dr = get_basic_spike_statistics(spikes)
-        sil = pseudo_sil_score(sources[i,:], fsamp)
+        spike_indices = df[df['unit_id'] == unique_labels[i]]['timestamp'].values.astype(int)
+        spike_times = df[df['unit_id'] == unique_labels[i]]['spike_time'].values
+        cov_isi, mean_dr = get_basic_spike_statistics(spike_times)
+        sil = pseudo_sil_score(sources[i,:], spike_indices, fsamp)
         results.append({
             'unit_id': unique_labels[i],
             'sil': sil,
