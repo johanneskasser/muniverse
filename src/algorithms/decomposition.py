@@ -161,18 +161,20 @@ def decompose_upperbound(
     data_generation_config: str,
     muap_cache_file: Optional[str],
     algorithm_config: Optional[str],
-    output_dir: Path
+    output_dir: Path,
+    metadata_file: Optional[str] = None
 ) -> Tuple[Dict, Dict]:
     """
     Run upperbound decomposition.
-    
+
     Args:
         data: EMG data array (channels x samples)
         data_generation_config: output_config from data generation
         muaps_cache_file: File where MUAPs are saved 
         algorithm_config: Optional path to algorithm configuration JSON file
         output_dir: Directory to save results
-    
+        metadata_file: Optional path to metadata JSON file for electrode selection info
+
     Returns:
         Tuple containing:
         - Dictionary with decomposition results
@@ -180,7 +182,7 @@ def decompose_upperbound(
     """
     # Initialize logger
     logger = AlgorithmLogger()
-    
+
     # Set input data information
     logger.set_input_data(
         file_name="numpy_array",
@@ -193,7 +195,7 @@ def decompose_upperbound(
         algo_cfg = {"ext_fact":8, "whitening_method":"ZCA", "cluster_method":'kmeans', 'whitening_reg':'auto'} # Will use defaults
 
     logger.set_algorithm_config(algo_cfg)
-    
+
     # Add preprocessing step
     logger.add_processing_step("Preprocessing", {
         "InputFormat": "numpy_array",
@@ -202,43 +204,45 @@ def decompose_upperbound(
 
     # Initialize and run upperbound
     ub = upper_bound(config=SimpleNamespace(**algo_cfg))
-    
+
     # Use the new load_muaps method to get the MUAPs
-    muaps_reshaped, fsamp, angle = ub.load_muaps(data_generation_config, muap_cache_file)
-    
+    muaps_reshaped, fsamp, angle = ub.load_muaps(data_generation_config, muap_cache_file, metadata_file)
+
     # Move EMG to Nchannels, Nsamples shape
-    data = data.T 
+    data = data.T
+    print(data.shape) 
     sources, spikes, sil = ub.decompose(data, muaps_reshaped, fsamp=fsamp)
-    
+
     # Add decomposition step
     logger.add_processing_step("Decomposition", {
         "Method": "UpperBound",
         "Configuration": algo_cfg,
         "Description": "Run UpperBound algorithm on input data",
         "MuapFile": str(muap_cache_file),
-        "AngleUsed": angle
+        "AngleUsed": angle,
+        "MetadataFile": str(metadata_file) if metadata_file else "None"
     })
-    
+
     # Prepare results
     results = {
         'sources': sources,
         'spikes': spikes,
         'silhouette': sil
     }
-    
+
     # Save results
     save_decomposition_results(output_dir, results, {})
-    
+
     # Log output files
     for root, _, files in os.walk(output_dir):
         for file in files:
             file_path = os.path.join(root, file)
             logger.add_output(file_path, os.path.getsize(file_path))
-    
+
     # Finalize and save the log
     log_path = logger.finalize(output_dir)
     print(f"Run log saved to: {log_path}")
-    
+
     return results, {}
 
 def decompose_cbss(
