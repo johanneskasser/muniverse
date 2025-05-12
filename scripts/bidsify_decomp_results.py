@@ -73,7 +73,7 @@ for i in np.arange(len(files)):
     # Initalize BIDS deivatives class
     my_derivative = bids_decomp_derivatives(pipelinename='SCD', root=bids_derivative_root, datasetname=datasetname, 
                                             subject=emg_recording.subject_id, 
-                                            task=emg_recording.task, 
+                                            task=emg_recording.task.split('-')[1], 
                                             session=emg_recording.session, 
                                             run=emg_recording.run, 
                                             datatype=emg_recording.datatype)
