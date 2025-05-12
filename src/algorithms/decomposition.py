@@ -2,7 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 import tempfile
-#from edfio import read_edf
+from edfio import read_edf
 import numpy as np
 import pandas as pd
 from typing import Dict, Tuple, Any, Optional, Union
@@ -70,30 +70,6 @@ def decompose_scd(
         algo_cfg = load_config(algorithm_config)
         logger.set_algorithm_config(algo_cfg)
     
-    # Get container info
-    if engine == "docker":
-        try:
-            inspect_output = subprocess.check_output([engine, "inspect", container]).decode()
-            inspect_data = json.loads(inspect_output)[0]
-            image_info = {
-                "name": inspect_data["RepoTags"][0] if inspect_data["RepoTags"] else "unknown",
-                "id": inspect_data["Id"],
-                "created": inspect_data["Created"]
-            }
-        except Exception as e:
-            print(f"Warning: Could not get container info: {e}")
-            image_info = {"name": "unknown", "id": "unknown", "created": "unknown"}
-    else:
-        image_info = {"name": "unknown", "id": "unknown", "created": "unknown"}
-
-    # Set container info
-    logger.set_container_info(
-        engine=engine,
-        engine_version=subprocess.check_output([engine, "--version"]).decode().strip(),
-        image=image_info["name"],
-        image_id=image_info["id"]
-    )
-    
     # Create a unique run directory with timestamp
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{timestamp}"
@@ -113,7 +89,10 @@ def decompose_scd(
             if data_path.suffix == '.edf':
                 # Load EDF and save as .npy
                 raw = read_edf(data_path)
-                n_channels = raw.num_signals
+                
+                # Read channels.tsv file to get channel information
+                channels_df = pd.read_csv(data_path.parent / f"{data_path.stem.replace('_emg', '')}_channels.tab", delimiter='\t')
+                n_channels = len(channels_df[channels_df['type'].str.startswith('EMG')])
                 emg_data = np.stack([raw.signals[i].data for i in range(n_channels)])
                 temp_emg_path = temp_dir / "temp_emg.npy"
                 np.save(temp_emg_path, emg_data)
@@ -134,7 +113,7 @@ def decompose_scd(
         logger.add_processing_step("Preprocessing", {
             "InputFormat": data_path.suffix[1:] if isinstance(data, str) else "numpy_array",
             "OutputFormat": "npy",
-            "Description": "Convert input data to numpy format for processing"
+            "Description": f"Convert input data from {data_path.suffix[1:]} to numpy format for processing"
         })
 
         # Build container command
