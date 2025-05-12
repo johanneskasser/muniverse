@@ -1,6 +1,8 @@
 import numpy as np
 from .decomposition_routines import *
-from .pre_processing import *
+import sys
+import os
+
 
 class upper_bound:
     '''
@@ -40,14 +42,15 @@ class upper_bound:
             else:
                 raise AttributeError(f"Invalid parameter: {key}")    
                 
-    def load_muaps(self, data_generation_config, muap_cache_file):
+    def load_muaps(self, data_generation_config, muap_cache_file, metadata_file=None):
         """
         Load and prepare MUAPs for decomposition.
-        
+
         Args:
             data_generation_config: Path to data generation configuration file
             muap_cache_file: Path to MUAP cache file
-            
+            metadata_file: Path to metadata JSON file for electrode selection info
+
         Returns:
             muaps_reshaped: Reshaped MUAPs ready for decomposition
             fsamp: Sampling frequency from config
@@ -55,12 +58,17 @@ class upper_bound:
         """
         # Load all the necessary files
         import json
+        
+        # Load configuration file
         with open(data_generation_config, 'r') as f:
             config = json.load(f)
         fsamp = config['RecordingConfiguration']['SamplingFrequency']
+        
         if muap_cache_file is not None:
             print(f"Loading MUAPs from cache: {muap_cache_file}")
             muaps_full = np.load(muap_cache_file, allow_pickle=True)
+        else:
+            raise ValueError("MUAP cache file is required for decomposition")
 
         # Now find the correct muaps according to the config
         movement_dof = config['MovementConfiguration']['MovementDOF']
@@ -69,19 +77,55 @@ class upper_bound:
             min_angle, max_angle = -65, 65
         elif movement_dof == "Radial-Ulnar-deviation":
             min_angle, max_angle = -10, 25
+        else:
+            min_angle, max_angle = -65, 65  # Default to Flexion-Extension range
+            print(f"Warning: Unknown movement DOF '{movement_dof}'. Using default angle range.")
 
         constant_angle = config['MovementConfiguration']["MovementProfileParameters"]['TargetAngle']
 
         muap_dof_samples = muaps_full.shape[1]
         angle_labels = np.linspace(min_angle, max_angle, muap_dof_samples).astype(int)
-        
+
         # Find the index of the angle in the MUAP library
         angle_idx = np.argmin(np.abs(angle_labels - constant_angle))
         muaps = muaps_full[:, angle_idx, :, :, :]
 
         # Reshape MUAPs from (n_mu, n_rows, n_cols, n_samples) to (n_mu, n_channels, n_samples)
         n_mu, n_rows, n_cols, n_samples = muaps.shape
-        muaps_reshaped = muaps.reshape(n_mu, n_rows * n_cols, n_samples)
+        
+        # Check if we need to use subset of electrodes based on metadata
+        selected_indices = None
+        if metadata_file and os.path.exists(metadata_file):
+            try:
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                
+                # Extract electrode array info from metadata
+                electrode_info = metadata.get("simulation_info", {}).get("electrode_array", {})
+                selected_columns = electrode_info.get("selected_columns", None)
+                rows = electrode_info.get("rows", n_rows)
+                
+                if selected_columns is not None:
+                    # Generate selected indices based on columns
+                    selected_indices = []
+                    for col in selected_columns:
+                        selected_indices.extend([col * rows + row for row in range(rows)])
+                    
+                    print(f"Using {len(selected_indices)} electrodes from metadata (columns: {selected_columns})")
+            except Exception as e:
+                print(f"Error reading metadata file: {str(e)}. Using all electrodes.")
+        
+        # Reshape the MUAPs
+        if selected_indices:
+            # First reshape to flattened form
+            muaps_flat = muaps.reshape(n_mu, n_rows * n_cols, n_samples)
+            # Then select only the required electrodes
+            muaps_reshaped = muaps_flat[:, selected_indices, :]
+            print(f"Selected {len(selected_indices)} electrodes from original {n_rows * n_cols}")
+        else:
+            # Use all electrodes
+            muaps_reshaped = muaps.reshape(n_mu, n_rows * n_cols, n_samples)
+            print(f"Using all {n_rows * n_cols} electrodes")
         
         return muaps_reshaped, fsamp, constant_angle
 
