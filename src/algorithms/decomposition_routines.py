@@ -100,7 +100,7 @@ def est_spike_times(sig, fsamp, cluster = 'kmeans', a = 2, min_delay = 0.01):
     Estimate spike indices given a motor unit source signal and compute
     a silhouette-like metric for source quality quantification
 
-    Parameters:
+    Args:
         sig (np.ndarray): Input signal (motor unit source)
         fsamp (float): Sampling rate in Hz
         cluster (string): Clustering method used to identify the spike indices
@@ -151,7 +151,7 @@ def gram_schmidt(w, B):
     """
     Stabilized Gram-Schmidt orthogonalization.
 
-    Parameters:
+    Args:
         w (np.ndarray): Input vector to be orthogonalized (shape: [n,])
         B (np.ndarray): Matrix of orthogonal basis vectors in columns (shape: [n, k])
 
@@ -173,7 +173,7 @@ def gram_schmidt(w, B):
 
     return u
 
-def remove_duplicates(sources, spikes, sil, B, fsamp, max_shift=0.1, tol=0.001, threshold=0.3, min_num_spikes = 10):
+def remove_duplicates(sources, spikes, sil, B, fsamp, max_shift=0.1, tol=0.001, threshold=0.3):
     """
     TODO Add description
 
@@ -183,11 +183,8 @@ def remove_duplicates(sources, spikes, sil, B, fsamp, max_shift=0.1, tol=0.001, 
 
     for i in np.arange(n_source):
 
-        # Check if the source has already been labeled and if it contains enough spikes
+        # Check if the source has already been labeled
         if new_labels[i] < i:
-            continue
-        elif len(spikes) < min_num_spikes:
-            new_labels[i] = np.nan
             continue
 
         # Make binary spike train of source i    
@@ -197,24 +194,24 @@ def remove_duplicates(sources, spikes, sil, B, fsamp, max_shift=0.1, tol=0.001, 
             # Make binary spike train of source j
             st2 = get_bin_spikes(spikes[j], sources.shape[1])
             # Compute the delay between source i and j
-            corr , shift = max_xcorr(st1, st2, max_shift=int(max_shift*fsamp))
+            _ , shift = max_xcorr(st1, st2, max_shift=int(max_shift*fsamp))
             # Compute the number of common spikes
             tp, _, _ = match_spikes(spikes[i], spikes[j], shift=shift, tol=tol*fsamp) 
             # Calculate the metaching rate and compare with threshold
             denom = max(len(spikes[i]), len(spikes[j]))
             match_score = tp / denom if denom > 0 else 0
-
+            # If the match score is above the theshold update the source label
             if match_score >= threshold:
                 new_labels[j] = i
 
     # Get the number of unqiue sources and initalize output variables
-    unique_labels = np.unique(new_labels[np.isfinite(new_labels)])
+    unique_labels = np.unique(new_labels)
     new_sources  = np.zeros((len(unique_labels),sources.shape[1]))
     new_spikes = {i: [] for i in range(len(unique_labels))}
     new_sil = np.zeros(len(unique_labels))
     new_B = np.zeros((B.shape[0], len(unique_labels)))
 
-    # 
+    # For each unqiue source select the one with the highest SIL score
     for i in np.arange(len(unique_labels)):
         idx = (new_labels == unique_labels[i]).astype(int)
         best_idx = np.argmax(idx * sil)
@@ -225,7 +222,7 @@ def remove_duplicates(sources, spikes, sil, B, fsamp, max_shift=0.1, tol=0.001, 
 
     return new_sources, new_spikes, new_sil, new_B
 
-def remove_bad_sources(sources, spikes, sil, B, threshold=0.9, min_n_spikes=10):
+def remove_bad_sources(sources, spikes, sil, B, threshold=0.9, min_num_spikes=10):
     """
     TODO Add description
     
@@ -235,7 +232,7 @@ def remove_bad_sources(sources, spikes, sil, B, threshold=0.9, min_n_spikes=10):
     new_spikes = {}
     new_spike_idx = 0
     for i in np.arange(sources.shape[0]):
-        if sil[i] < threshold or len(spikes[i]) < min_n_spikes:
+        if sil[i] < threshold or len(spikes[i]) < min_num_spikes:
             bad_source_idx = np.append(bad_source_idx, i)
         else:
             new_spikes[new_spike_idx] = spikes[i]
@@ -245,12 +242,38 @@ def remove_bad_sources(sources, spikes, sil, B, threshold=0.9, min_n_spikes=10):
     new_sil = np.delete(sil, bad_source_idx.astype(int), axis=0)
     new_B = np.delete(B, bad_source_idx.astype(int), axis=1)
 
-    return new_sources, new_spikes, new_sil, new_B    
+    return new_sources, new_spikes, new_sil, new_B   
+
+def map_source_from_window_to_global_time_idx(sources, spikes, win, n_time_samples): 
+    """
+    TODO some description
+
+    Args:
+        sources (np.ndarray): Original sources
+        spikes (dict): Original spikes
+        win (tuple): Time indices of the window (start, end)
+        n_time_samples (int): Number of time samples of the original recording
+
+    Returns:
+        new_sources (np.ndarray): Mapped sources
+        spikes (float): (dict): Mapped spikes
+    
+    """
+
+    # Initalize variables
+    new_sources = np.zeros((sources.shape[0], n_time_samples))
+    new_spikes = {i: [] for i in range(sources.shape[0])}
+
+    for i in np.arange(new_sources.shape[0]):
+        new_sources[i,win[0]:win[1]] = sources[i,:]
+        new_spikes[i] = spikes[i] + win[0]
+    
+    return new_sources, new_spikes
 
 
 
 def spike_triggered_average(sig, spikes, win=0.02, fsamp = 2048):
-    '''
+    """
     Calculate the spike triggered average given the spike times of a source
 
     Parameters:
@@ -262,7 +285,7 @@ def spike_triggered_average(sig, spikes, win=0.02, fsamp = 2048):
     Returns:
         waveform (2D np.array): Estimated impulse response of a given source
     
-    '''
+    """
 
     width = int(win*fsamp)
     waveform = np.zeros((sig.shape[0], 2*width+1))

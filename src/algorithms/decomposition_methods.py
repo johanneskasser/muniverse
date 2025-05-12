@@ -197,6 +197,11 @@ class basic_cBSS:
         self.refinement_loop = True
         self.sil_th = 0.9
         self.cov_th = 0.35
+        self.min_num_spikes = 10
+        self.match_th = 0.3
+        self.match_max_shift = 0.1
+        self.match_tol = 0.001
+        
 
         # Convert config object (if provided) to a dictionary
         config_dict = vars(config) if config is not None else {}
@@ -311,11 +316,15 @@ class basic_cBSS:
                 white_sig, _ = peel_off(white_sig, spikes[i], win=0.025, fsamp=fsamp) 
 
         # Remove duplicates        
-        sources, spikes, sil, mu_filters = remove_duplicates(sources, spikes, sil, mu_filters, fsamp)
-
+        sources, spikes, sil, mu_filters = remove_duplicates(sources, spikes, sil, mu_filters, fsamp,
+                                                             max_shift=self.match_max_shift,
+                                                             tol=self.match_tol,
+                                                             threshold=self.match_th)
+                                    
         # Remove bad sources 
         sources, spikes, sil, mu_filters  = remove_bad_sources(sources, spikes, sil, mu_filters, 
-                                                               threshold=self.sil_th, min_n_spikes=10)
+                                                               threshold=self.sil_th, 
+                                                               min_n_spikes=self.min_num_spikes)
        
         return sources, spikes, sil, mu_filters
 
