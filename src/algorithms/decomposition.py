@@ -269,7 +269,7 @@ def decompose_cbss(
     if algorithm_config:
         algo_cfg = load_config(algorithm_config)
     else:
-        algo_cfg = {}  # Will use defaults
+        algo_cfg = None  # Will use defaults
     
     logger.set_algorithm_config(algo_cfg)
     

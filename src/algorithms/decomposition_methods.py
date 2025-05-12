@@ -202,7 +202,6 @@ class basic_cBSS:
         self.match_max_shift = 0.1
         self.match_tol = 0.001
         
-
         # Convert config object (if provided) to a dictionary
         config_dict = vars(config) if config is not None else {}
 
@@ -324,7 +323,7 @@ class basic_cBSS:
         # Remove bad sources 
         sources, spikes, sil, mu_filters  = remove_bad_sources(sources, spikes, sil, mu_filters, 
                                                                threshold=self.sil_th, 
-                                                               min_n_spikes=self.min_num_spikes)
+                                                               min_num_spikes=self.min_num_spikes)
        
         return sources, spikes, sil, mu_filters
 
