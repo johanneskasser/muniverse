@@ -407,32 +407,5 @@ def get_basic_spike_statistics(spike_times, min_num_spikes=10):
     
     return cov, mean_fr
 
-def summarize_signal_based_metrics(sources, df, fsamp):
 
-    unique_labels = df['unit_id'].unique()
-
-    results = []
-
-    for i in np.arange(len(unique_labels)):
-        spike_indices = df[df['unit_id'] == unique_labels[i]]['timestamp'].values.astype(int)
-        spike_times = df[df['unit_id'] == unique_labels[i]]['spike_time'].values
-        cov_isi, mean_dr = get_basic_spike_statistics(spike_times)
-        quality_metrics = signal_based_quality_metrics(sources[i,:], spike_indices, fsamp)
-        results.append({
-            'unit_id': int(unique_labels[i]),
-            'n_spikes': int(quality_metrics['n_spikes']),
-            'sil': quality_metrics['sil'],
-            'pnr': quality_metrics['pnr'],
-            'peak_height': quality_metrics['peak_height'],
-            'z_score': quality_metrics['z_score_height'],
-            'cov_peak': quality_metrics['cov_peak'],
-            'sep_prctile': quality_metrics['sep_prctile90'],
-            'sep_std': quality_metrics['sep_std'],
-            'skew': quality_metrics['skew_val'],
-            'kurt': quality_metrics['kurt_val'],
-            'cov_isi': cov_isi,
-            'mean_dr': mean_dr
-            })
-        
-    return pd.DataFrame(results)
 
