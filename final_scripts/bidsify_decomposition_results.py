@@ -12,24 +12,6 @@ def list_files(root, extension):
     files = list(root.rglob(f'*{extension}'))
     return files
 
-def get_recording_info(source_file_name):
-    splitname = source_file_name.split('_')
-
-    if splitname[1].split('-')[0] == 'ses':
-        sub = int(splitname[0].split('-')[1])
-        ses = int(splitname[1].split('-')[1])
-        task = splitname[2].split('-')[1]
-        run = int(splitname[3].split('-')[1])
-        data_type = splitname[4].split('.')[0]
-    else:        
-        sub = int(splitname[0].split('-')[1])
-        task = splitname[1].split('-')[1]
-        run = int(splitname[2].split('-')[1])
-        ses = -1
-        data_type = splitname[3].split('.')[0]
-
-    return sub, ses, task, run, data_type
-
 def main():
     parser = argparse.ArgumentParser(description='Convert the output of a decomposition in BIDS format')
     parser.add_argument('-d', '--dataset_name', help='Name of the dataset to process')
@@ -89,11 +71,15 @@ def main():
         # Set pipeline sidecar file
         my_derivative.set_metadata('pipeline_sidecar', str(files[i]))
         
-        # Get the preicted spikes
+        # Get the predicted spikes
         spikes_file = str(list_files(files[i].parent, '.tsv')[0])
         spikes_df = pd.read_csv(spikes_file, delimiter='\t')
+
+        # Align the predicted spikes with the recording
         spikes_df['spike_time'] = spikes_df['timestamp'] / fsamp + start_time
         spikes_df['timestamp'] = spikes_df['timestamp'] + int(start_time*fsamp)
+
+        # Set spike data
         my_derivative.set_metadata('spikes', spikes_df)
 
         # Get the predicted sources 
@@ -101,14 +87,16 @@ def main():
         predicted_sources = np.load(predicted_sources)
         predicted_sources = predicted_sources['predicted_sources']
 
+        # Align the predicted sources with the recording
         shifted_sources = np.zeros((n_samples, predicted_sources.shape[1]))
 
         for j in np.arange(predicted_sources.shape[1]):
             shifted_sources[start_idx:end_idx,j] = predicted_sources[:,j] 
 
+        # Set source data
         my_derivative.set_data('source', shifted_sources, fsamp) 
 
-        # Write your results
+        # Write BIDS derivative
         my_derivative.write() 
 
 if __name__ == '__main__':
