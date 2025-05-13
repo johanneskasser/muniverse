@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import toeplitz
 from scipy.signal import find_peaks, convolve
+from scipy.fft import fft, ifft
 from sklearn.cluster import KMeans
 from ..evaluation.evaluate import *
 
@@ -321,10 +322,26 @@ def peel_off(sig, spikes, win=0.02, fsamp=2048):
     firings = np.zeros(sig.shape[1])
     firings[spikes] = 1
 
-    comp_sig = np.zeros_like(sig)
+    # Zero-pad waveform to match signal shape
+    L = sig.shape[1]
+    pad_len = L - waveform.shape[1]
+    waveform_padded = np.pad(waveform, ((0, 0), (0, pad_len)), mode='constant')
 
-    for i in np.arange(sig.shape[0]):
-        comp_sig[i,:] = convolve(firings, waveform[i,:], 'same') 
+    # FFT of firings (same for all channels)
+    fft_firings = fft(firings)
+
+    # FFT of waveform for each channel
+    fft_waveform = fft(waveform_padded, axis=1)
+
+    # Multiply in frequency domain (broadcasting firings to each channel)
+    fft_product = fft_waveform * fft_firings
+
+    # IFFT to get time domain component signal
+    comp_sig = np.real(ifft(fft_product, axis=1))
+
+    # Correct time shift due to FFT convolution (center of kernel)
+    shift = (waveform.shape[1] - 1) // 2
+    comp_sig = np.roll(comp_sig, -shift, axis=1)
 
     residual_sig = sig - comp_sig
 
