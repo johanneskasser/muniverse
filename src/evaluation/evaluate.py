@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.signal import correlate, correlation_lags, find_peaks
-from scipy.spatial.distance import cdist
+from scipy.stats import kurtosis, skew
 
 def match_spikes(s1, s2, shift=0, tol=0.001):
     """
@@ -253,6 +253,60 @@ def evaluate_spike_matches(df1, df2, t_start = 0, t_end = 60, tol=0.001,
 
     return pd.DataFrame(results)
 
+def signal_based_quality_metrics(source, spikes, fsamp, min_peak_dist=0.01, match_dist=0.001):
+    """
+    Compute a set of signal based quality metrics
+
+    Args:
+        - source (ndarray): The predicted source
+        - spikes (ndarray): Indices of the predicted spikes
+        - fsamp : float Sampling frequency (Hz).
+        - min_peak_distance_ms (float): Minimum distance between peaks (for peak detection), in seconds.
+        - match_dist (float): Window size (± s) around predicted spikes to exclude from background.
+
+    Returns
+        - quality_metrics (dict): Dictonary of source quality metrics    
+    
+    """
+
+    quality_metrics = {}
+
+    # Number of Spikes
+    quality_metrics['n_spikes'] = len(spikes)
+    # Skewness
+    quality_metrics['skew_val'] = skew(source)
+    # Kurtosis
+    quality_metrics['kurt_val'] = kurtosis(source)
+    # Mean peak amplitude
+    quality_metrics['peak_height'] = np.mean(source[spikes])
+    # Coefficient of variation of the peaks
+    quality_metrics['cov_peak'] = np.std(source[spikes])/np.mean(source[spikes])
+
+    # Silhouette-like score
+    sil, centroids, background_peaks = pseudo_sil_score(source, spikes, fsamp, 
+                                                       min_peak_dist=min_peak_dist, 
+                                                    match_dist=match_dist)
+    
+    quality_metrics['sil'] = sil
+
+    pred_amps = source[spikes]
+    back_amps = source[background_peaks]
+    
+    # Seperability metric
+    quality_metrics['sep_prctile90'] = (np.percentile(pred_amps,10) - np.percentile(back_amps,90)) / np.mean(pred_amps)
+
+    # Seperation in terms of standard deviations
+    quality_metrics['sep_std'] = (centroids[0] - centroids[1]) / np.std(pred_amps)
+
+    # Pulse-to-noise ration (PNR)
+    pnr, noise_indices = calc_pnr(source, spikes)
+    quality_metrics['pnr'] = pnr
+
+    # Z-score of the peak amplitude
+    quality_metrics['z_score_height'] = np.mean(source[spikes]) / np.std(source[noise_indices])
+
+    return quality_metrics
+
 def pseudo_sil_score(source, spikes, fsamp, min_peak_dist=0.01, match_dist=0.001):
     """
     Computes a silhouette-like quality score for predicted spikes based on 
@@ -267,16 +321,18 @@ def pseudo_sil_score(source, spikes, fsamp, min_peak_dist=0.01, match_dist=0.001
 
     Returns:
         - sil (float): Silhouette-like quality score.
+        - background_spikes (ndarray): Indices of the background spikes
+        - centroids (tuple): Centrodis of the peak and noise cluster
     """
 
     spikes = np.asarray(spikes, dtype=int)
     match_window = int(round(fsamp * match_dist))
     min_dist = int(round(fsamp * min_peak_dist))
 
-    source = source * abs(source)
+    sig = source * abs(source)
 
     # Step 1: Detect peaks
-    detected_peaks, _ = find_peaks(source, distance=min_dist)
+    detected_peaks, _ = find_peaks(sig, distance=min_dist)
 
     # Step 2: Exclude predicted spikes ± match_window
     mask = np.ones(len(detected_peaks), dtype=bool)
@@ -289,15 +345,45 @@ def pseudo_sil_score(source, spikes, fsamp, min_peak_dist=0.01, match_dist=0.001
     if len(spikes) < 2 or len(background_spikes) == 0:
         return 0.0
 
-    pred_amps = source[spikes].reshape(-1, 1)
-    back_amps = source[background_spikes].reshape(-1, 1)
+    pred_amps = sig[spikes].reshape(-1, 1)
+    back_amps = sig[background_spikes].reshape(-1, 1)
 
     centroids = [np.mean(pred_amps), np.mean(back_amps)]
     within = np.sum((pred_amps  - centroids[0])**2) if len(pred_amps) > 1 else 0.0
     between = np.sum((pred_amps  - centroids[1])**2)
 
     sil = (between - within) / max(between, within) if max(between, within) > 0 else 0.0
-    return sil
+
+    return sil, centroids, background_spikes
+
+def calc_pnr(source, spikes):
+    """
+    TODO Add description
+    
+    """
+
+    # Calculate PNR
+    signal_length = len(source)
+
+    sig = source * abs(source)
+
+    expanded_indices = set()
+    for idx in spikes:
+        for neighbor in [idx-1, idx, idx+1]:
+            if 0 <= neighbor < signal_length:
+                expanded_indices.add(neighbor)
+
+    expanded_indices = np.array(sorted(expanded_indices))
+
+    all_indices = np.arange(signal_length)
+    noise_indices = np.setdiff1d(all_indices, expanded_indices)
+
+    peak_cluster = sig[expanded_indices]**2
+    noise_cluster = sig[noise_indices]**2
+
+    pnr = 10 * np.log10(np.mean(peak_cluster) / np.mean(noise_cluster))
+
+    return pnr, noise_indices
 
 def get_basic_spike_statistics(spike_times, min_num_spikes=10):
     """
@@ -331,10 +417,19 @@ def summarize_signal_based_metrics(sources, df, fsamp):
         spike_indices = df[df['unit_id'] == unique_labels[i]]['timestamp'].values.astype(int)
         spike_times = df[df['unit_id'] == unique_labels[i]]['spike_time'].values
         cov_isi, mean_dr = get_basic_spike_statistics(spike_times)
-        sil = pseudo_sil_score(sources[i,:], spike_indices, fsamp)
+        quality_metrics = signal_based_quality_metrics(sources[i,:], spike_indices, fsamp)
         results.append({
-            'unit_id': unique_labels[i],
-            'sil': sil,
+            'unit_id': int(unique_labels[i]),
+            'n_spikes': int(quality_metrics['n_spikes']),
+            'sil': quality_metrics['sil'],
+            'pnr': quality_metrics['pnr'],
+            'peak_height': quality_metrics['peak_height'],
+            'z_score': quality_metrics['z_score_height'],
+            'cov_peak': quality_metrics['cov_peak'],
+            'sep_prctile': quality_metrics['sep_prctile90'],
+            'sep_std': quality_metrics['sep_std'],
+            'skew': quality_metrics['skew_val'],
+            'kurt': quality_metrics['kurt_val'],
             'cov_isi': cov_isi,
             'mean_dr': mean_dr
             })
