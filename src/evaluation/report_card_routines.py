@@ -5,7 +5,7 @@ from ..algorithms.decomposition_routines import peel_off
 from ..algorithms.pre_processing import bandpass_signals, notch_signals
 from datetime import datetime
 
-def summarize_signal_based_metrics(sources, df, emg_data, fsamp):
+def summarize_signal_based_metrics(sources, df, fsamp):
     """
     TODO Add description
     
@@ -28,7 +28,7 @@ def summarize_signal_based_metrics(sources, df, emg_data, fsamp):
             'peak_height': quality_metrics['peak_height'],
             'z_score': quality_metrics['z_score_height'],
             'cov_peak': quality_metrics['cov_peak'],
-            'sep_prctile': quality_metrics['sep_prctile90'],
+            'sep_prctile90': quality_metrics['sep_prctile90'],
             'sep_std': quality_metrics['sep_std'],
             'skew': quality_metrics['skew_val'],
             'kurt': quality_metrics['kurt_val'],
