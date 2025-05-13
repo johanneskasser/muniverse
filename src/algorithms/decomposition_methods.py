@@ -22,6 +22,11 @@ class upper_bound:
         self.whitening_method = 'ZCA'
         self.whitening_reg  = 'auto'
         self.cluster_method  = 'kmeans'
+        
+        # Added by DH 
+        self.sil_th = 0.9
+        self.min_num_spikes = 10
+
 
         # Convert config object (if provided) to a dictionary
         config_dict = vars(config) if config is not None else {}
@@ -146,12 +151,17 @@ class upper_bound:
             sources (np.ndarray): Estimated sources (n_mu x n_samples)
             spikes (dict): Spiking instances of the motor neurons
             sil (np.ndarray): Source quality metric
+            mu_filters (np.ndarray): Motor unit filters
         """
 
-        n_mu  = muaps.shape[0]
-        sources  = np.zeros((n_mu, sig.shape[1]))
+        n_mu = muaps.shape[0]
+        sources = np.zeros((n_mu, sig.shape[1]))
         spikes = {i: [] for i in range(n_mu)}
         sil = np.zeros(n_mu)
+        
+        # Initialize mu_filters array
+        white_dim = sig.shape[0] * self.ext_fact  # Dimension after extension
+        mu_filters = np.zeros((white_dim, n_mu))
 
         # Extend signals and subtract the mean
         ext_sig = extension(sig, self.ext_fact)
@@ -168,8 +178,16 @@ class upper_bound:
             # Estimate source
             sources[i,:] = w.T @ white_sig
             spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
+            # Store the filter
+            mu_filters[:,i] = w
 
-        return sources, spikes, sil
+        # Remove bad sources 
+        sources, spikes, sil, mu_filters = remove_bad_sources(sources, spikes, sil, mu_filters, 
+                                                            threshold=self.sil_th, 
+                                                            min_num_spikes=self.min_num_spikes)
+        # TODO Dimitris maybe keep the interface similar with the rest
+        # and return the filters aswell
+        return sources, spikes, sil, mu_filters
 
 
     def muap_to_filter(self, muap, ext_mean, Z):
@@ -210,6 +228,7 @@ class upper_bound:
         """
         # ToDo
         pass
+    
     
 
 class basic_cBSS:
