@@ -380,19 +380,16 @@ def process_upperbound_recording(edf_path: Path, output_dir: Path, data_type: st
       print("No simulation file found. Cannot proceed with upperbound decomposition.")
       return
     
-    # Find MUAP cache file
-    muap_cache_file = None
-    if muap_cache_dir.exists():
-      muap_cache_files = list(muap_cache_dir.glob('*muaps.npy'))
-      if muap_cache_files:
-        muap_cache_file = muap_cache_files[0]
-        print(f"Found MUAP cache file: {muap_cache_file}")
-      else:
-        print(f"Warning: No MUAP cache files found in {muap_cache_dir}")
-        return
-    else:
-      print(f"Warning: MUAP cache directory does not exist: {muap_cache_dir}")
-      return
+    with open(simulation_file, 'r') as f:
+        simulation_config = json.load(f)
+    
+    subject_id = simulation_config['InputData']['Configuration']['SubjectConfiguration']['SubjectSeed']
+    movement_config = simulation_config['InputData']['Configuration']['MovementConfiguration']
+    movement_dof = movement_config['MovementDOF']
+    muscle = movement_config['TargetMuscle']
+    
+    muap_cache_file = muap_cache_dir / f'subject_{subject_id}_{muscle}_{movement_dof}_muaps.npy'
+    print(f"Using MUAP cache file: {muap_cache_file}")
     
     # Extract metadata for logging purposes
     metadata = {'filename': edf_path.name, 'format': 'edf', 'data_type': data_type}
@@ -489,9 +486,9 @@ def main():
     BIDS_ROOT = f'/rds/general/user/pm1222/ephemeral/muniverse/datasets/bids/{DATASET_NAME}'
     OUTPUT_DIR = f'/rds/general/user/pm1222/ephemeral/muniverse/interim/{args.algorithm}_outputs/{DATASET_NAME}'
 
-    SCD_CONFIG = f'/rds/general/user/dc23/home/EMG/muniverse-cluster/configs/scd.json'
-    CBSS_CONFIG = f'/rds/general/user/dc23/home/EMG/muniverse-cluster/configs/cbss.json'    
-    UPPERBOUND_CONFIG = f'/rds/general/user/dc23/home/EMG/muniverse-cluster/configs/upperbound.json' 
+    SCD_CONFIG = f'/rds/general/user/pm1222/home/muniverse-demo/configs/scd.json'
+    CBSS_CONFIG = f'/rds/general/user/pm1222/home/muniverse-demo/configs/cbss.json'    
+    UPPERBOUND_CONFIG = f'/rds/general/user/pm1222/home/muniverse-demo/configs/upperbound.json' 
     CONTAINER = f'/rds/general/user/pm1222/ephemeral/muniverse/muniverse_scd.sif'
     
     # Set default config based on algorithm choice
