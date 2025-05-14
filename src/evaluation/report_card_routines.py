@@ -51,16 +51,22 @@ def compute_reconstruction_error(sig, spike_df, timeframe = None, win=0.05, fsam
 
     unique_labels = spike_df['unit_id'].unique()
 
+    if timeframe is not None:
+        sig = sig[:, timeframe[0]:timeframe[1]]
+        residual_sig = residual_sig[:, timeframe[0]:timeframe[1]]
+        reconstructed_sig = reconstructed_sig[:, timeframe[0]:timeframe[1]]
+        spike_df['timestamp'] = spike_df['timestamp'] - timeframe[0]     
+
     for i in np.arange(len(unique_labels)):
         spike_indices = spike_df[spike_df['unit_id'] == unique_labels[i]]['timestamp'].values.astype(int)
         residual_sig, comp_sig = peel_off(residual_sig, spike_indices, win=win, fsamp=fsamp)
         reconstructed_sig += comp_sig
 
-    if timeframe is not None:
-        sig[:, :timeframe[0]] = 0
-        sig[:, timeframe[1]:] = 0  
-        residual_sig[:, :timeframe[0]] = 0
-        residual_sig[:, timeframe[1]:] = 0    
+    # if timeframe is not None:
+    #     sig[:, :timeframe[0]] = 0
+    #     sig[:, timeframe[1]:] = 0  
+    #     residual_sig[:, :timeframe[0]] = 0
+    #     residual_sig[:, timeframe[1]:] = 0    
 
     explained_var = 1 - np.var(residual_sig) / np.var(sig)    
 
