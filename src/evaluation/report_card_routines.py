@@ -78,13 +78,11 @@ def get_runtime(pipeline_sidecar):
 
     return runtime
 
-def get_global_metrics(emg_data, spikes_df, fsamp, pipeline_sidecar, datasetname, filename, target_muscle='n.a'):
+def get_global_metrics(emg_data, spikes_df, fsamp, pipeline_sidecar, t_win, datasetname, filename, target_muscle='n.a'):
 
     # Extract time configuration for computing the reconstruction error
-    start_time = pipeline_sidecar['AlgorithmConfiguration']['Config']['start_time']
-    end_time = pipeline_sidecar['AlgorithmConfiguration']['Config']['end_time']
-    start_idx = int(start_time * fsamp)
-    end_idx = int(end_time * fsamp)
+    start_idx = int(t_win[0] * fsamp)
+    end_idx = int(t_win[1] * fsamp)
 
     explained_var = compute_reconstruction_error(emg_data, spikes_df, fsamp=fsamp, timeframe=[start_idx, end_idx])
     runtime = get_runtime(pipeline_sidecar)

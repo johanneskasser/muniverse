@@ -32,6 +32,19 @@ def get_recording_info(source_file_name):
 
     return sub, ses, task, run, data_type
 
+def get_time_window(pipeline_sidecar, pipelinename):
+
+    if pipelinename == 'cbss':
+        t0 = pipeline_sidecar['AlgorithmConfiguration']['start_time']
+        t1 = pipeline_sidecar['AlgorithmConfiguration']['end_time']
+    elif pipelinename == 'scd':
+        t0 = pipeline_sidecar['AlgorithmConfiguration']['Config']['start_time']
+        t1 = pipeline_sidecar['AlgorithmConfiguration']['Config']['end_time']
+    else:
+        raise ValueError('Invalid algorithm')   
+
+    return t0, t1
+
 def main():
     parser = argparse.ArgumentParser(description='Generate report card for a decomposition pipeline applied to a dataset')
     parser.add_argument('-d', '--dataset_name', help='Name of the dataset to process')
@@ -97,11 +110,14 @@ def main():
         
         my_derivative.read()
 
+        t0, t1 = get_time_window(my_derivative.pipeline_sidecar, pipelinename)
+
         # Get global report
         my_global_report = get_global_metrics(emg_data=emg_data.T, 
                                               spikes_df=my_derivative.spikes, 
                                               fsamp=fsamp, 
                                               pipeline_sidecar=my_derivative.pipeline_sidecar,
+                                              t_win = [t0, t1],
                                               datasetname=datasetname, 
                                               filename=filenames[j], 
                                               target_muscle=target_muscle
