@@ -39,8 +39,8 @@ def match_spikes(s1, s2, shift=0, tol=0.001):
             j += 1
 
     tp = matched_1.sum()
-    fn = (~matched_1).sum()
-    fp = (~matched_2).sum()
+    fp = (~matched_1).sum()
+    fn = (~matched_2).sum()
     return tp, fp, fn
 
 def get_bin_spikes(spike_indices, n_samples):
