@@ -1,9 +1,7 @@
 import numpy as np
 from .decomposition_routines import *
 from .pre_processing import *
-import sys
-import os
-
+from scipy.stats import skew
 
 class upper_bound:
     '''
@@ -178,6 +176,10 @@ class upper_bound:
         ext_mean = np.mean(ext_sig, axis=1, keepdims=True) 
         ext_sig -= ext_mean
 
+        # Remove the edges from the exteneded signal
+        ext_sig[:,:self.ext_fact*2] = 0
+        ext_sig[:,-self.ext_fact*2:] = 0
+
         # Whiten the extended signals
         white_sig, Z = whitening(Y=ext_sig, method=self.whitening_method)
         # Loop over each MU
@@ -186,6 +188,8 @@ class upper_bound:
             w = self.muap_to_filter(muaps[i,:,:], ext_mean, Z)
             # Estimate source
             sources[i,:] = w.T @ white_sig
+            # Make sure the peaks are in positive direction
+            sources[i,:] = np.sign(skew(sources[i,:])) * sources[i,:]
             spikes[i], sil[i] = est_spike_times(sources[i,:], fsamp, cluster=self.cluster_method)
             # Store the filter
             mu_filters[:,i] = w
@@ -221,6 +225,7 @@ class upper_bound:
 
         # Find the column with the largest L2 norm and return it as MUAP filter
         col_norms = np.linalg.norm(white_muap, axis=0)
+        col_norms[:self.ext_fact] = 0
         w = white_muap[:, np.argmax(col_norms)]
 
         # Normalize w
