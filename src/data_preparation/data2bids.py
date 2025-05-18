@@ -62,7 +62,7 @@ class bids_dataset:
         # read participant.tsv
         name = self.root + '/' + 'participants.tsv'
         if os.path.isfile(name):
-            self.subjects_data = pd.read_table(name)
+            self.subjects_data = pd.read_table(name, on_bad_lines='warn')
         # read participant.json
         name = self.root + '/' + 'participants.json'
         if os.path.isfile(name):
@@ -424,7 +424,7 @@ class bids_emg_recording(bids_dataset):
 
         # Read non-inherited metadata files
         if os.path.isfile(name + 'channels.tsv'):
-            self.channels = pd.read_table(name + 'channels.tsv')
+            self.channels = pd.read_table(name + 'channels.tsv', on_bad_lines='warn')
         if os.path.isfile(name + self.datatype + '.json'):
             with open(name + self.datatype + '.json', 'r') as f:
                 self.emg_sidecar = json.load(f)
@@ -436,9 +436,9 @@ class bids_emg_recording(bids_dataset):
             # Read electrodes.tsv
             if self.inherited_metadata.get('electrodes', False):
                 if os.path.isfile(session_name + '_electrodes.tsv'):
-                    self.electrodes = pd.read_table(session_name + '_electrodes.tsv')
+                    self.electrodes = pd.read_table(session_name + '_electrodes.tsv', on_bad_lines='warn')
             elif os.path.isfile(name + 'electrodes.tsv'):
-                self.electrodes = pd.read_table(name + 'electrodes.tsv')
+                self.electrodes = pd.read_table(name + 'electrodes.tsv', on_bad_lines='warn')
             
             # Read coordsystem.json
             if self.inherited_metadata.get('coordsystem', False):
@@ -451,7 +451,7 @@ class bids_emg_recording(bids_dataset):
         else:
             # For non-session data, read from datapath
             if os.path.isfile(name + 'electrodes.tsv'):
-                self.electrodes = pd.read_table(name + 'electrodes.tsv')
+                self.electrodes = pd.read_table(name + 'electrodes.tsv', on_bad_lines='warn')
             if os.path.isfile(name + 'coordsystem.json'):
                 with open(name + 'coordsystem.json', 'r') as f:
                     self.coord_sidecar = json.load(f)
@@ -609,11 +609,11 @@ class bids_neuromotion_recording(bids_emg_recording):
 
         # Read simulation-specific files
         if os.path.isfile(name + 'spikes.tsv'):
-            self.spikes = pd.read_table(name + 'spikes.tsv')
+            self.spikes = pd.read_table(name + 'spikes.tsv', on_bad_lines='warn')
         if os.path.isfile(name + 'motorunits.tsv'):
-            self.motor_units = pd.read_table(name + 'motorunits.tsv')
+            self.motor_units = pd.read_table(name + 'motorunits.tsv', on_bad_lines='warn')
         if os.path.isfile(name + 'internals.tsv'):
-            self.internals_sidecar = pd.read_table(name + 'internals.tsv')
+            self.internals_sidecar = pd.read_table(name + 'internals.tsv', on_bad_lines='warn')
         if os.path.isfile(name + 'simulation.json'):
             with open(name + 'simulation.json', 'r') as f:
                 self.simulation_sidecar = json.load(f)
@@ -746,7 +746,7 @@ class bids_decomp_derivatives(bids_emg_recording):
         # read *_predictedspikes.tsv
         fname = name + 'predictedspikes.tsv' 
         if os.path.isfile(fname):
-            self.spikes = pd.read_table(fname)
+            self.spikes = pd.read_table(fname, on_bad_lines='warn')
         # read *_pipeline.json  
         fname = name + 'pipeline.json'
         if os.path.isfile(fname):
