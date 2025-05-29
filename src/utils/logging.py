@@ -229,7 +229,7 @@ class BaseMetadataLogger:
         except subprocess.CalledProcessError:
             return {
                 "Name": "Muniverse",
-                "URL": "https://github.com/pranavm19/muniverse-demo.git", # TODO: Replace with final URL
+                "URL": "https://github.com/pranavm19/muniverse.git", # TODO: Replace with final URL
                 "Branch": "main",
                 "Commit": "unknown",
             }
