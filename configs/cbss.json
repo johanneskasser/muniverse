@@ -21,7 +21,7 @@
         "opt_max_iter": 100,
         "opt_tol": 1e-4,
         "source_deflation": "gram-schmidt",
-        "peel_off": "false",
+        "peel_off": false,
         "cluster_method": "kmeans",
         "random_seed": 1909,
         "refinement_loop": true,
