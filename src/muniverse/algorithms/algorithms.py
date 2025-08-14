@@ -1,14 +1,12 @@
 import numpy as np
 from scipy.stats import skew
-
-from .decomposition_routines import *
-from .pre_processing import *
+from .core import *
 
 
-class upper_bound:
+class UpperBound:
     """
     Class for computing an upper bound of convolutive blind source
-    separation (cBSS) based motor neuron indedification making use
+    separation (cBSS) based motor neuron identification making use
     of a known ground-truth.
     """
 
@@ -18,7 +16,6 @@ class upper_bound:
         self.whitening_method = "ZCA"
         self.whitening_reg = "auto"
         self.cluster_method = "kmeans"
-        # Added by DH
         self.sil_th = 0.9
         self.min_num_spikes = 10
 
@@ -43,129 +40,6 @@ class upper_bound:
                 setattr(self, key, value)
             else:
                 raise AttributeError(f"Invalid parameter: {key}")
-
-    def load_muaps(self, simulation_config_path, muap_cache_file):
-        """
-        Load and prepare MUAPs for decomposition using a single simulation configuration file.
-
-        Args:
-            simulation_config_path: Path to simulation configuration JSON file
-            muap_cache_file: Path to MUAP cache file
-
-        Returns:
-            muaps_reshaped: Reshaped MUAPs ready for decomposition
-            fsamp: Sampling frequency from config
-            angle: Angle used for MUAP selection
-        """
-        # Load simulation configuration file
-        import json
-
-        with open(simulation_config_path, "r") as f:
-            simulation_config = json.load(f)
-
-        # Extract configuration from the simulation config
-        config = simulation_config.get("InputData", {}).get("Configuration", {})
-        if not config:
-            # Fallback: if it's already the direct configuration without the outer structure
-            config = simulation_config.get("Configuration", simulation_config)
-
-        # Get sampling frequency
-        fsamp = config.get("RecordingConfiguration", {}).get("SamplingFrequency")
-        if not fsamp:
-            raise ValueError("Could not find sampling frequency in simulation config")
-
-        # Load MUAPs from cache
-        if muap_cache_file is not None:
-            print(f"Loading MUAPs from cache: {muap_cache_file}")
-            muaps_full = np.load(muap_cache_file, allow_pickle=True)
-        else:
-            raise ValueError("MUAP cache file is required for decomposition")
-
-        # Extract movement information
-        movement_config = config.get("MovementConfiguration", {})
-        movement_dof = movement_config.get("MovementDOF")
-
-        # Generate angle labels
-        if movement_dof == "Flexion-Extension":
-            min_angle, max_angle = -65, 65
-        elif movement_dof == "Radial-Ulnar-deviation":
-            min_angle, max_angle = -10, 25
-        else:
-            min_angle, max_angle = -65, 65  # Default to Flexion-Extension range
-            print(
-                f"Warning: Unknown movement DOF '{movement_dof}'. Using default angle range."
-            )
-
-        constant_angle = movement_config.get("MovementProfileParameters", {}).get(
-            "TargetAngle"
-        )
-
-        muap_dof_samples = muaps_full.shape[1]
-        angle_labels = np.linspace(min_angle, max_angle, muap_dof_samples).astype(int)
-
-        # Find the index of the angle in the MUAP library
-        angle_idx = np.argmin(np.abs(angle_labels - constant_angle))
-        muaps = muaps_full[:, angle_idx, :, :, :]
-
-        # Reshape MUAPs from (n_mu, n_rows, n_cols, n_samples) to (n_mu, n_channels, n_samples)
-        n_mu, n_rows, n_cols, n_samples = muaps.shape
-
-        # Check if we need to use subset of electrodes based on simulation config
-        selected_indices = None
-
-        # Extract electrode array info from config
-        electrode_config = config.get("RecordingConfiguration", {}).get(
-            "ElectrodeConfiguration", {}
-        )
-        desired_n_cols = electrode_config.get("DesiredNCols")
-
-        # Get selected columns from simulation metadata if available
-        if (
-            "OutputData" in simulation_config
-            and "Metadata" in simulation_config["OutputData"]
-        ):
-            center_column = simulation_config["OutputData"]["Metadata"].get(
-                "CenterColumn"
-            )
-
-            # If center column is specified and desired columns is less than total columns
-            if center_column is not None and desired_n_cols and desired_n_cols < n_cols:
-                # Calculate how many columns to take on each side of the center column
-                half_width = desired_n_cols // 2
-
-                # Use the same wrapping logic as in run_neuromotion.py
-                # Biomime grid wraps around -- use modulo to handle wrapping
-                selected_columns = [
-                    (center_column - half_width + i) % n_cols
-                    for i in range(desired_n_cols)
-                ]
-
-                # Generate selected indices based on columns
-                selected_indices = []
-                for col in selected_columns:
-                    selected_indices.extend(
-                        [col * n_rows + row for row in range(n_rows)]
-                    )
-
-                print(
-                    f"Using {len(selected_indices)} electrodes (columns: {selected_columns})"
-                )
-
-        # Reshape the MUAPs
-        if selected_indices:
-            # First reshape to flattened form
-            muaps_flat = muaps.reshape(n_mu, n_rows * n_cols, n_samples)
-            # Then select only the required electrodes
-            muaps_reshaped = muaps_flat[:, selected_indices, :]
-            print(
-                f"Selected {len(selected_indices)} electrodes from original {n_rows * n_cols}"
-            )
-        else:
-            # Use all electrodes
-            muaps_reshaped = muaps.reshape(n_mu, n_rows * n_cols, n_samples)
-            print(f"Using all {n_rows * n_cols} electrodes")
-
-        return muaps_reshaped, fsamp, constant_angle
 
     def decompose(self, sig, muaps, fsamp):
         """
@@ -270,7 +144,7 @@ class upper_bound:
         pass
 
 
-class basic_cBSS:
+class CBSS:
     """
     Class for performing convolutive blind source separation to identify the
     spiking activity of motor neurons using the fastICA algorithm.
@@ -389,7 +263,7 @@ class basic_cBSS:
             act_idx_histoty = np.array([])
 
         # Loop over each MU
-        for i in np.arange(self.ica_n_iter):
+        for i in range(self.ica_n_iter):
             # Initalize
             if self.opt_initalization == "random":
                 w = np.random.randn(white_sig.shape[0])
@@ -518,15 +392,15 @@ class basic_cBSS:
         intervall decreases.
 
         Args:
-            - w (np.ndarray): Initial weight vector
-            - X (np.ndarray): Whitened signal matrix (n_channels x n_samples)
-            - cov (float): Coefficient of variance of the initial source
-            - fsamp (float): Sampling rate in Hz
+            w (np.ndarray): Initial weight vector
+            X (np.ndarray): Whitened signal matrix (n_channels x n_samples)
+            cov (float): Coefficient of variance of the initial source
+            fsamp (float): Sampling rate in Hz
 
         Returns:
-            - w (np.ndarray): Optimized weight vector
-            - spikes (np.ndarray): Sample indices of motor neuron discharges
-            - cov (float): Coefficient of variance of the optimized source
+            w (np.ndarray): Optimized weight vector
+            spikes (np.ndarray): Sample indices of motor neuron discharges
+            cov (float): Coefficient of variance of the optimized source
 
         """
 
