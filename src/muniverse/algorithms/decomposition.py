@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 
 from ..utils.logging import AlgorithmLogger
+from .algorithms import CBSS, UpperBound
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -302,7 +303,7 @@ def decompose_cbss(
         data = data[:, int(start_time):int(end_time)]
 
         # Initialize and run CBSS with config
-        cbss = basic_cBSS(config=SimpleNamespace(**algo_cfg))
+        cbss = CBSS(config=SimpleNamespace(**algo_cfg))
         sources, spikes, sil, _ = cbss.decompose(
             data, fsamp=algo_cfg["sampling_frequency"]
         )

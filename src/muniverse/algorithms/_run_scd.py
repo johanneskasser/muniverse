@@ -77,7 +77,9 @@ def train(run_dir: str):
     )
 
     # Apply time window if specified
-    neural_data = neural_data[config.start_time * config.sampling_frequency : config.end_time * config.sampling_frequency, :]
+    start_idx = int(config.start_time * config.sampling_frequency)
+    end_idx = int(config.end_time * config.sampling_frequency)
+    neural_data = neural_data[start_idx:end_idx, :]
 
     # Initiate the model and run
     model = SwarmContrastiveDecomposition()
