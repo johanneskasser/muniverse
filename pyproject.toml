@@ -35,6 +35,7 @@ dev = [
     "mypy",
     "jupyter",
     "ipykernel",
+    "matplotlib",
 ]
 
 [tool.setuptools]
@@ -45,7 +46,6 @@ package-dir = { "muniverse" = "src/muniverse" }
 packages = [
     "muniverse",
     "muniverse.algorithms",
-    "muniverse.data_generation",
     "muniverse.datasets",
     "muniverse.evaluation",
     "muniverse.utils",
