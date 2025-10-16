@@ -151,6 +151,8 @@ def decompose_scd(
             # Log output files for tracking
             for root, _, files in os.walk(run_dir):
                 for file in files:
+                    if "input_data.npy" in file:
+                        continue
                     file_path = os.path.join(root, file)
                     logger.add_output(file_path, os.path.getsize(file_path))
 
@@ -161,7 +163,7 @@ def decompose_scd(
 
         finally:
             # Always finalize logger to ensure metadata is captured
-            logger.finalize()
+            logger.finalize(engine, container)
         
         return results, logger.log_data
 
