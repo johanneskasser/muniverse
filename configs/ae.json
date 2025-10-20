@@ -21,7 +21,7 @@
 
     "latent_dim": null,
 
-    "epochs": 10,
+    "epochs": 120,
     "batch_size": 5000,
     "learning_rate": 0.008,
     "sparsity_p": 0.9,
