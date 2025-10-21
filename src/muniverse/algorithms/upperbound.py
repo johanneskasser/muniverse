@@ -206,9 +206,8 @@ def process_neuromotion_muaps(muap_cache, simulation_config):
     return processed_muaps
 
 
-def process_hybrid_tibialis_muaps(muap_cache, simulation_config):
+def process_hybrid_tibialis_muaps(muap_cache, subject_config):
     """
     Load and prepare MUAPs for decomposition for a given hybrid tibialis recording.
     """
-    # Pick the right MUAPs for the given subject
-    pass
+    return muap_cache[subject_config['simulation_info']['selected_indices']]
