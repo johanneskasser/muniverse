@@ -45,3 +45,14 @@ muniverse/
 ├── pyproject.toml
 └── README.md
 ```
+
+### Citation
+
+@inproceedings{
+  muniverse-2025,
+  title={{MU}niverse: A Simulation and Benchmarking Suite for Motor Unit Decomposition},
+  author={Pranav Mamidanna and Thomas Klotz and Dimitrios Halatsis and Agnese Grison and Irene Mendez Guerra and Shihan Ma and Arnault H. Caillet and Simon Avrillon and Robin Rohl{\'e}n and Dario Farina},
+  booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems Datasets and Benchmarks Track},
+  year={2025},
+  url={https://openreview.net/forum?id=Slrp3l7aYo}
+}
