@@ -5,8 +5,8 @@ import h5py
 import os
 import json
 from edfio import *
-from src.data_preparation.data2bids import *
-from src.data_preparation.otb_io import open_otb, format_otb_channel_metadata
+from muniverse.utils.data2bids import *
+from muniverse.utils.otb_io import open_otb, format_otb_channel_metadata
 #from .sidecar_templates import emg_sidecar_template, dataset_sidecar_template
 from pathlib import Path
 
@@ -133,10 +133,16 @@ n_sub = 1 #len(sub_id)
 #matfile = loadmat(sourcepath + 'S1_10_DF.otb+_decomp.mat_edited.mat', struct_as_record=False, squeeze_me=True)
 
 
-subjects_data = {'name': ['sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06', 'sub-07', 'sub-08',
-                          'sub-11', 'sub-12', 'sub-13', 'sub-14', 'sub-15', 'sub-16', 'sub-17', 'sub-18'], 
-            'sex': ['n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a',
-                    'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a']}
+subjects_data = {
+    'name': [
+        'sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06', 'sub-07', 'sub-08',
+        'sub-11', 'sub-12', 'sub-13', 'sub-14', 'sub-15', 'sub-16', 'sub-17', 'sub-18'
+    ], 
+    'sex': [
+        'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a',
+        'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a'
+    ]
+}
 dataset_sidecar = manual_metadata["DatasetDescription"] #dataset_sidecar_template(ID='Caillet2023')
 
 Avrillon_2024 = bids_dataset(datasetname='Avrillon_et_al_2024', root=str(Path.home()) + '/Downloads/')
@@ -153,11 +159,11 @@ for i in np.arange(len(sub_id)):
         if sub_id[i] < 10:
             muscle = 'Tibialis Anterior'
             grid   = 'GR04MM1305'
-            ied    = '4 mm'
+            ied    = 4
         else:
             muscle = 'Vastus Lateralis'
             grid   = 'GR08MM1305'
-            ied    = '8 mm'
+            ied    = 8
 
         task = 'isometric' + filelist[j].split('_')[1] + 'percentmvc'
 
