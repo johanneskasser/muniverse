@@ -11,8 +11,13 @@ CONFIG_PATH=$4
 OUTPUT_DIR=$5
 CACHE_DIR=$6  # Optional
 
+# Check for CPU-only override via environment variable
+if [ "$MUNIVERSE_CPU_ONLY" = "1" ]; then
+  echo "[INFO] CPU-only mode forced via MUNIVERSE_CPU_ONLY=1"
+  GPU_FLAG_DOCKER=""
+  GPU_FLAG_SINGULARITY=""
 # Detect NVIDIA GPU availability on the host
-if command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then
+elif command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then
   echo "[INFO] NVIDIA GPU detected, enabling GPU support"
   GPU_FLAG_DOCKER="--gpus all"
   GPU_FLAG_SINGULARITY="--nv"
@@ -31,17 +36,6 @@ else
   CACHE_MOUNT_DOCKER=""
   CACHE_MOUNT_SINGULARITY=""
   CACHE_ARG=""
-fi
-
-# Detect NVIDIA GPU availability on the host
-if command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then
-  echo "[INFO] NVIDIA GPU detected, enabling GPU support"
-  GPU_FLAG_DOCKER="--gpus all"
-  GPU_FLAG_SINGULARITY="--nv"
-else
-  echo "[WARN] No NVIDIA GPU detected, falling back to CPU only"
-  GPU_FLAG_DOCKER=""
-  GPU_FLAG_SINGULARITY=""
 fi
 
 if [ "$ENGINE" == "docker" ]; then

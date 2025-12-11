@@ -37,8 +37,14 @@ fi
 # Create output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"
 
+# Check for CPU-only override via environment variable
+if [ "$MUNIVERSE_CPU_ONLY" = "1" ]; then
+  echo "[INFO] CPU-only mode forced via MUNIVERSE_CPU_ONLY=1"
+  GPU_FLAG_DOCKER=""
+  GPU_FLAG_SINGULARITY=""
+  PYTORCH_FLAG="--pytorch-device cpu"
 # Detect NVIDIA GPU availability on the host
-if command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then
+elif command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then
   echo "[INFO] NVIDIA GPU detected, enabling GPU support"
   GPU_FLAG_DOCKER="--gpus all"
   GPU_FLAG_SINGULARITY="--nv"
