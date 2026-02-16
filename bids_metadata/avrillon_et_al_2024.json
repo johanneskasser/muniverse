@@ -42,7 +42,7 @@
     "EMGSidecar": {
         "SkinPreparation": "The skin was shaved and cleaned with an abrasive pad and water.",
         "EMGPlacementScheme": "other",
-        "EMGPlacementSchemeDescription": "Four grids were carefully positioned side-to-side with a 4-mm distance between the electrodes at the edges of adjacent grids. The 256 electrodes were centered to the muscle belly (right tibialis anterior) and laid within the muscle perimeter identified through palpation. Two bands damped with water were placed around the ankle as ground (R2) and reference (R1) electrodes.",
+        "EMGPlacementSchemeDescription": "Four grids were carefully positioned side-to-side with a 4-mm distance between the electrodes at the edges of adjacent grids. The 256 electrodes were centered to the muscle belly (right tibialis anterior or vastus lateralis) and laid within the muscle perimeter identified through palpation. Two bands damped with water were placed around the ankle as ground (R2) and reference (R1) electrodes.",
         "EMGReference": "R1",
         "EMGGround": "R2",
         "SamplingFrequency": 2048,
@@ -67,8 +67,10 @@
     },
 
     "CoordSystemSidecar":{
-        "EMGCoordinateSystem": "local", 
-        "EMGCoordinateUnits": "mm"
+        "EMGCoordinateSystem": "Other", 
+        "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; all local electrode coordinates (per grid) are mapped on a single global coordinate system.",
+        "EMGCoordinateUnits": "mm",
+        "AnchorElectrode": "E12 - Grid1"
     }
 }
 

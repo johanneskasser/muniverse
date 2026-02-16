@@ -58,8 +58,10 @@
     },
 
     "CoordSystemSidecar":{
-        "EMGCoordinateSystem": "local", 
-        "EMGCoordinateUnits": "mm"
+        "EMGCoordinateSystem": "Other", 
+        "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; all local electrode coordinates (per grid) are mapped on a single global coordinate system.",
+        "EMGCoordinateUnits": "mm",
+        "AnchorElectrode": "E12 - Grid1"
     }
 }
 
