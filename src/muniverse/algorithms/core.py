@@ -1,11 +1,127 @@
 import numpy as np
 import pandas as pd
-from scipy.fft import fft, ifft
+from scipy.fft import fft, ifft, rfft, irfft, rfftfreq
 from scipy.linalg import toeplitz
-from scipy.signal import find_peaks
+from scipy.signal import butter, filtfilt, iirnotch, find_peaks, firwin2
 from sklearn.cluster import KMeans
 
 from ..evaluation.evaluate import *
+
+
+def bandpass_signals(emg_data, fsamp, high_pass=20, low_pass=500, order=2, ftype="butter"):
+    """
+    Bandpass filter emg data
+
+    Args:
+        emg_data (ndarray): emg data (n_channels x n_samples)
+        fsamp (float): Sampling frequency
+        low_pass (float): Cut-off frequency for the low-pass filter
+        high_pass (float): Cut-off frequency for the high-pass filter
+        order (int): Order of the filter (butter) or number of filter tabs (firwin2)
+        ftype (string): Filter type (butter, firwin2)
+
+    Returns:
+        ndarray : filtered emg data (n_channels x n_samples)
+    """
+
+    if ftype == "butter":
+        b, a = butter(order, [high_pass, low_pass], fs=fsamp, btype="band")
+        emg_data = filtfilt(b, a, emg_data, axis=1)
+    elif ftype == "firwin2":
+        # Normalize frequencies to Nyquist (0..1)
+        nyq = fsamp / 2
+        f = [0, high_pass*0.9, high_pass, low_pass, low_pass*1.1, nyq]  # small transition bands
+        m = [0, 0, 1, 1, 0, 0]  # 0 outside band, 1 inside
+        # Design FIR filter
+        fir_coeff = firwin2(order, f, m, fs=fsamp)
+        emg_data = filtfilt(fir_coeff, [1.0], emg_data, axis=1)
+    else:
+        raise ValueError(f"The specified filter type option {ftype} is invalid")
+
+    return emg_data
+
+
+def notch_signals(emg_data, fsamp, nfreq=50, dfreq=1, order=2, n_harmonics=3, ftype="butter"):
+    """
+    Notch filter emg data
+
+    Args:
+        emg_data (ndarray): emg data (n_channels x n_samples)
+        fsamp (float): Sampling frequency
+        nfreq (float): frequency to be filtered
+        dfreq (float): width of the notch filter (plus/minus dfreq)
+        order (int): Order of the filter
+        n_harmonics (int): Number of harmonics to be filtered
+        ftype (string): Filter type (butter, fft, iirnotch)
+
+    Returns:
+        ndarray : filtered emg data (n_channels x n_samples)
+    """
+
+    harmonics = nfreq * np.arange(1, n_harmonics + 1)
+
+    if ftype == "butter":
+
+        for i in np.arange(n_harmonics):
+            b, a = butter(
+                order,
+                [harmonics[i] - dfreq, harmonics[i] + dfreq],
+                fs=fsamp,
+                btype="bandstop",
+            )
+            emg_data = filtfilt(b, a, emg_data, axis=1)
+
+    elif ftype == "fft":
+        N = emg_data.shape[1]
+
+        spectrum = rfft(emg_data, axis=1)
+        freqs = rfftfreq(N, d=1/fsamp)
+
+        for i in np.arange(n_harmonics):
+            # Gaussian notch (1D over frequency)
+            #gaussian = np.exp(-0.5 * ((freqs - harmonics[i]) / dfreq)**2)
+            # Convert to attenuation profile (1 - gaussian dip)
+            #attenuation = 1 - gaussian
+            # Broadcast across channels
+            #spectrum *= attenuation[np.newaxis, :]
+
+            # Create notch mask (1D)
+            mask = np.abs(freqs - harmonics[i]) <= dfreq
+    
+            # Broadcast mask across channels
+            spectrum[:, mask] = 0
+
+        emg_data = irfft(spectrum, n=N, axis=1)
+
+    elif ftype == "iirnotch":
+        for i in np.arange(n_harmonics):
+            b, a = iirnotch(harmonics[i], order, fsamp)
+            emg_data = filtfilt(b, a, emg_data, axis=1)
+
+    else:
+        raise ValueError(f"The specified filter type option {ftype} is invalid")
+
+    return emg_data
+
+
+def reject_bad_channels(data, bad_channels):
+    """
+    Reject a list of bad channels from the data matrix
+
+    Args:
+        data (ndarray): Data matrix (channels x samples)
+        bad_channels (ndarray): List of bad channel indices
+
+    Returns:
+        data (ndarray): Updated data matrix 
+        mask (ndarray): Array showing if channels are used (True) or rejected (False)
+    """
+
+    mask = np.ones(data.shape[1], dtype=bool)
+    mask[bad_channels] = False
+    data = data[mask,:]
+
+    return data, mask
 
 
 def extension(Y, R):
@@ -195,7 +311,7 @@ def remove_duplicates(
 
     Args:
         - sources (np.ndarray): Original sources (n_mu x n_samples)
-        - spikes (dict): Original ppiking instances of the motor neurons
+        - spikes (dict): Original spiking instances of the motor neurons
         - sil (np.ndarray): Original source quality metric
         - mu_filters (np.ndarray): Original motor unit filters
         - fsamp (float): Sampling rate in Hz
@@ -246,7 +362,7 @@ def remove_duplicates(
     new_filters = np.zeros((mu_filters.shape[0], len(unique_labels)))
 
     # For each unqiue source select the one with the highest SIL score
-    for i in np.arange(len(unique_labels)):
+    for i in range(len(unique_labels)):
         idx = (new_labels == unique_labels[i]).astype(int)
         best_idx = np.argmax(idx * sil)
         new_sources[i, :] = sources[best_idx, :]
@@ -317,7 +433,7 @@ def map_source_from_window_to_global_time_idx(sources, spikes, win, n_time_sampl
     new_sources = np.zeros((sources.shape[0], n_time_samples))
     new_spikes = {i: [] for i in range(sources.shape[0])}
 
-    for i in np.arange(new_sources.shape[0]):
+    for i in range(new_sources.shape[0]):
         new_sources[i, win[0] : win[1]] = sources[i, :]
         new_spikes[i] = spikes[i] + win[0]
 

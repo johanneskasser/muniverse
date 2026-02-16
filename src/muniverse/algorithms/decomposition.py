@@ -1,3 +1,11 @@
+"""
+High-level wrapper functions for EMG decomposition with logging.
+
+These functions never raise exceptions. They always return (results, log_data),
+even on failure. Failed decompositions return {"sources": None, ...} with logs containing
+error details. Callers could check if results["sources"] is None to detect failures.
+"""
+
 import json
 import os
 import subprocess
@@ -8,10 +16,12 @@ from types import SimpleNamespace
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
 
 from ..utils.logging import AlgorithmLogger
-from .decomposition_methods import basic_cBSS, upper_bound
-from .decomposition_routines import spike_dict_to_long_df
+from .cbss import CBSS
+from .upperbound import UpperBound
+from .ae_decomposer import AEDecoder, AEDecoderConfig
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -22,51 +32,73 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
 def decompose_scd(
     data: np.ndarray,
-    output_dir: Path,
-    algorithm_config: Optional[str] = None,
+    algorithm_config: Optional[Dict] = None,
     engine: str = "singularity",
     container: str = "environment/muniverse_scd.sif",
     metadata: Optional[Dict] = None,
+    repo_path: Optional[str] = None,
+    conda_env: Optional[str] = None,
 ) -> Tuple[Dict, Dict]:
     """
     Run SCD decomposition using container.
 
     Args:
         data: numpy array of EMG data (channels x samples)
-        algorithm_config: Optional path to algorithm configuration JSON file
-        output_dir: Directory to save results
-        engine: Container engine to use ("docker" or "singularity")
+        algorithm_config: Optional dictionary containing algorithm configuration
+        engine: Container engine to use ("docker", "singularity" or "host")
         container: Path to container image
         metadata: Optional dictionary containing input data metadata for logging
+        repo_path: If SCD runs on your native OS provide the path to the folder hosting the code
+        conda_env: If SCD runs on your native OS specify which conda environment to be used
 
     Returns:
         Tuple containing:
-        - Dictionary with decomposition results
+        - Dictionary with decomposition results containing:
+          * sources: Estimated sources
+          * spikes: Spike timing dictionary
+          * silhouette: Quality metrics (if available)
         - Dictionary with processing metadata
     """
     # Initialize logger
     logger = AlgorithmLogger()
-    # Add SCD generator info
-    logger.add_generated_by(
-        name="Swarm Contrastive Decomposition",
-        url="https://github.com/AgneGris/swarm-contrastive-decomposition.git",
-        commit="632a9ad041cf957584926d6b5cc64b7fe741e9eb",
-        license="Creative Commons Attribution-NonCommercial 4.0 International Public License",
-    )
+        
+    if engine == "host":
+        if not os.path.isdir(repo_path):
+            raise ValueError(f"Invalid local repository path: {repo_path}")
+        try:
+            scd_git_info = logger._get_git_info(repo_path)
+            logger.add_generated_by(
+                name="Swarm Contrastive Decomposition",
+                url=scd_git_info["URL"],
+                commit=scd_git_info["Commit"],
+                branch=scd_git_info["Branch"],
+                license="Creative Commons Attribution-NonCommercial 4.0 International Public License",
+            )
+        except:
+            raise ValueError(f"Failed to extract the local repository metadata")
+            
+    elif engine in ["docker", "singularity"]:
+        logger.add_generated_by(
+            name="Swarm Contrastive Decomposition",
+            url="https://github.com/AgneGris/swarm-contrastive-decomposition.git",
+            commit="632a9ad041cf957584926d6b5cc64b7fe741e9eb",
+            license="Creative Commons Attribution-NonCommercial 4.0 International Public License",
+        )
+    else:
+        raise ValueError(f"Invalid engine {engine}")
 
     # Set input data information
     if metadata:
-        logger.set_input_data(
-            file_name=metadata["filename"], file_format=metadata["format"]
-        )
+        logger.set_input_data(file_name=metadata["filename"], file_format=metadata["format"])
     else:
         logger.set_input_data(file_name="numpy_array", file_format="npy")
 
     # Load and set algorithm configuration
     if algorithm_config:
-        algo_cfg = load_config(algorithm_config)
+        algo_cfg = algorithm_config
         logger.set_algorithm_config(algo_cfg)
     else:
+        # Load default configuration
         config_dir = Path(__file__).parent.parent.parent / "configs"
         algorithm_config = config_dir / "scd.json"
         if not algorithm_config.exists():
@@ -76,75 +108,99 @@ def decompose_scd(
         algo_cfg = load_config(algorithm_config)
         logger.set_algorithm_config(algo_cfg)
 
-    # Create a unique run directory with timestamp
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    run_id = f"run_{timestamp}"
-    run_dir = os.path.join(output_dir, run_id)
-    os.makedirs(run_dir, exist_ok=True)
+    # Create single run directory following neuromotion pattern
+    with tempfile.TemporaryDirectory() as run_dir:
+        run_dir = Path(run_dir)
 
-    # Create temporary directory for intermediate files
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_dir = Path(temp_dir)
-
-        # Save data as .npy file
-        temp_emg_path = temp_dir / "temp_emg.npy"
-        np.save(temp_emg_path, data)
-
-        # Get the absolute path to the script
-        current_dir = Path(__file__).parent
-        run_script_path = current_dir / "_run_scd.sh"
-        script_path = current_dir / "_run_scd.py"
-
-        if not run_script_path.exists():
-            raise FileNotFoundError(f"Script not found at {run_script_path}")
-
-        # Build container command
-        cmd = [
-            str(run_script_path),
-            engine,
-            container,
-            str(script_path),
-            str(temp_emg_path),
-            str(algorithm_config),
-            str(run_dir),
-        ]
-
-        # Run container
         try:
+            # Save data as standardized input file
+            input_data_path = run_dir / "input_data.npy"
+            np.save(input_data_path, data)
+            
+            # Save config as standardized config file (using already loaded config)
+            config_path = run_dir / "config.json"
+            with open(config_path, 'w') as f:
+                json.dump(algo_cfg, f, indent=2)
+
+            # Get the absolute path to the script
+            current_dir = Path(__file__).parent
+            run_script_path = current_dir / "_run_scd.sh"
+            script_path = current_dir / "_run_scd.py"
+
+            if not run_script_path.exists():
+                raise FileNotFoundError(f"Script not found at {run_script_path}")
+
+            # Build container command with unified run_dir
+            cmd = [
+                str(run_script_path),
+                engine,
+                container,
+                str(script_path),
+                str(run_dir),
+                repo_path,
+                conda_env,
+            ]
+
+            # Run container
             subprocess.run(cmd, check=True, cwd=current_dir)
-            print(f"[INFO] Decomposition completed successfully at {run_dir}")
+            print(f"[INFO] Decomposition completed successfully")
             logger.set_return_code("run.sh", 0)
-        except subprocess.CalledProcessError as e:
-            print(f"[ERROR] Decomposition failed: {e}")
-            print(
-                f"[ERROR] Command output: {e.output if hasattr(e, 'output') else 'No output'}"
-            )
-            print(
-                f"[ERROR] Command stderr: {e.stderr if hasattr(e, 'stderr') else 'No stderr'}"
-            )
-            logger.set_return_code("run.sh", e.returncode)
 
-        print(f"[INFO] Results saved to {run_dir}")
+            # Load results from container output files in run_dir
+            results = {}
+            
+            # Load sources if available
+            sources_path = run_dir / "predicted_sources.npz"
+            if sources_path.exists():
+                sources_data = np.load(sources_path)
+                results["sources"] = sources_data["predicted_sources"]
+            else:
+                results["sources"] = None
+            
+            # Load spikes if available
+            spikes_path = run_dir / "predicted_timestamps.tsv"
+            if spikes_path.exists():
+                spikes_df = pd.read_csv(spikes_path, sep="\t")
+                # Convert back to dictionary format
+                spikes_dict = {}
+                for unit_id in spikes_df["unit_id"].unique():
+                    unit_spikes = spikes_df[spikes_df["unit_id"] == unit_id]["timestamp"].values
+                    spikes_dict[unit_id] = unit_spikes.tolist()
+                results["spikes"] = spikes_dict
+            else:
+                results["spikes"] = {}
+            
+            # SCD doesn't typically provide silhouette scores
+            # TODO: Compute silhouette scores
+            results["silhouette"] = None
+            
+            # Log output files for tracking
+            for root, _, files in os.walk(run_dir):
+                for file in files:
+                    if "input_data.npy" in file:
+                        continue
+                    file_path = os.path.join(root, file)
+                    logger.add_output(file_path, os.path.getsize(file_path))
 
-        # Log output files
-        for root, _, files in os.walk(run_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                logger.add_output(file_path, os.path.getsize(file_path))
+        except Exception as e:
+            print(f"[ERROR] SCD decomposition failed: {str(e)}")
+            logger.set_return_code("run.sh", 1)
+            results = {"sources": None, "spikes": {}, "silhouette": None}
 
-        # Finalize and save the log
-        log_path = logger.finalize(run_dir)
-        print(f"Run log saved to: {log_path}")
-
-        return None, logger.log_data
+        finally:
+            # Always finalize logger to ensure metadata is captured
+            if engine == "host":
+                logger.finalize()
+            else:
+                logger.finalize(engine, container)
+        
+        return results, logger.log_data
 
 
 def decompose_upperbound(
     data: np.ndarray,
-    output_dir: Path,
-    simulation_config: str,  # Changed parameter name
-    muap_cache_file: Optional[str] = None,
-    algorithm_config: Optional[str] = None,
+    muaps: np.ndarray,
+    algorithm_config: Optional[Dict] = None,
     metadata: Optional[Dict] = None,
 ) -> Tuple[Dict, Dict]:
     """
@@ -152,109 +208,93 @@ def decompose_upperbound(
 
     Args:
         data: EMG data array (channels x samples)
-        output_dir: Directory to save results
-        simulation_config: Path to simulation configuration JSON file
-        muap_cache_file: Path to MUAP cache file
+        muaps: MUAPs array (n_motor_units x n_channels x duration)
         algorithm_config: Optional path to algorithm configuration JSON file
         metadata: Optional dictionary containing input data metadata for logging
 
     Returns:
         Tuple containing:
-        - Dictionary with decomposition results
+        - Dictionary with decomposition results containing:
+          * sources: Estimated sources
+          * spikes: Spike timing dictionary
+          * silhouette: Quality metrics
+          * mu_filters: Motor unit filters
         - Dictionary with processing metadata
     """
     # Initialize logger
     logger = AlgorithmLogger()
-    print(metadata)
+    
     # Set input data information
     if metadata:
-        logger.set_input_data(
-            file_name=metadata["filename"], file_format=metadata["format"]
-        )
+        logger.set_input_data(file_name=metadata["filename"], file_format=metadata["format"])
     else:
         logger.set_input_data(file_name="numpy_array", file_format="npy")
 
-    # Load algorithm config if provided, otherwise use defaults
+    # Load and set algorithm configuration
     if algorithm_config:
-        algo_cfg = load_config(algorithm_config)
+        # Handle nested Config structure if present
+        if "Config" in algorithm_config:
+            algo_cfg = algorithm_config["Config"]
+        else:
+            # Assume the dict is the config itself
+            algo_cfg = algorithm_config
+        logger.set_algorithm_config(algo_cfg)
     else:
-        algo_cfg = {
-            "ext_fact": 8,
-            "whitening_method": "ZCA",
-            "cluster_method": "kmeans",
-            "whitening_reg": "auto",
-        }  # Will use defaults
+        # Load default configuration
+        config_dir = Path(__file__).parent.parent.parent / "configs"
+        algorithm_config_path = config_dir / "upperbound.json"
+        if not algorithm_config_path.exists():
+            raise FileNotFoundError(
+                f"Default UpperBound config not found at {algorithm_config_path}"
+            )
+        algo_cfg = load_config(str(algorithm_config_path))["Config"]
+        logger.set_algorithm_config(algo_cfg)
 
-    logger.set_algorithm_config(algo_cfg)
+    # Get sampling frequency from config
+    fsamp = algo_cfg.get("sampling_frequency", 2048)
 
-    # Add preprocessing step
-    logger.add_processing_step(
-        "Preprocessing",
-        {
-            "InputFormat": "numpy_array",
-            "Description": "Input data is already in numpy format",
-        },
-    )
+    try:
+        # Initialize and run upperbound
+        # Apply start and end time to data
+        start_time = algo_cfg["start_time"] * algo_cfg["sampling_frequency"]
+        end_time = algo_cfg["end_time"] * algo_cfg["sampling_frequency"]
+        data = data[:, start_time:end_time].copy()
+        
+        ub = UpperBound(config=SimpleNamespace(**algo_cfg))
 
-    # Initialize and run upperbound
-    ub = upper_bound(config=SimpleNamespace(**algo_cfg))
+        # Validate muaps format
+        if muaps.ndim != 3:
+            raise ValueError("MUAPs must be a 3D array (n_motor_units x n_channels x duration)")
 
-    # Use the new load_muaps method to get the MUAPs
-    muaps_reshaped, fsamp, angle = ub.load_muaps(
-        simulation_config, muap_cache_file
-    )  # Updated method call
+        # Run decomposition
+        sources, spikes, sil, mu_filters = ub.decompose(data, muaps, fsamp=fsamp)
 
-    # Add decomposition step
-    logger.add_processing_step(
-        "Decomposition",
-        {
-            "Method": "UpperBound",
-            "Configuration": algo_cfg,
-            "Description": "Run UpperBound algorithm on input data",
-            "MuapFile": str(muap_cache_file),
-            "AngleUsed": angle,
-            "SimulationConfig": str(simulation_config),  # Updated logging
-        },
-    )
+        # Prepare results
+        results = {
+            "sources": sources,
+            "spikes": spikes,
+            "silhouette": sil,
+            "mu_filters": mu_filters,
+        }
 
-    # Move EMG to Nchannels, Nsamples shape
-    sources, spikes, sil, mu_filters = ub.decompose(
-        data, muaps_reshaped, fsamp=fsamp
-    )  # Updated to receive mu_filters
+        logger.set_return_code("upperbound", 0)
+        print(f"[INFO] UpperBound decomposition completed successfully")
 
-    # Prepare results
-    results = {
-        "sources": sources,
-        "spikes": spikes,
-        "silhouette": sil,
-        "mu_filters": mu_filters,  # Include filters in results
-    }
-
-    logger.set_return_code("upperbound", 0)
-
-    # Create a unique run directory with timestamp
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    run_id = f"run_{timestamp}"
-    run_dir = os.path.join(output_dir, run_id)
-    os.makedirs(run_dir, exist_ok=True)
-    # Save results using the optimized format
-    save_decomposition_results(run_dir, results, {}, fsamp=fsamp)
-    # Log output files
-    for root, _, files in os.walk(run_dir):
-        for file in files:
-            file_path = os.path.join(root, file)
-            logger.add_output(file_path, os.path.getsize(file_path))
-    # Finalize and save the log
-    log_path = logger.finalize(run_dir)
-    print(f"Run log saved to: {log_path}")
-
+    except Exception as e:
+        print(f"[ERROR] UpperBound decomposition failed: {str(e)}")
+        logger.set_return_code("upperbound", 1)
+        results = {"sources": None, "spikes": {}, "silhouette": None, "mu_filters": None}
+    
+    finally:
+        # Always finalize logger to ensure metadata is captured
+        logger.finalize()
+    
     return results, logger.log_data
 
 
 def decompose_cbss(
     data: np.ndarray,
-    output_dir: Path,
-    algorithm_config: Optional[str] = None,
+    algorithm_config: Optional[Dict] = None,
     metadata: Optional[Dict] = None,
 ) -> Tuple[Dict, Dict]:
     """
@@ -263,30 +303,36 @@ def decompose_cbss(
     Args:
         data: numpy array of EMG data (channels x samples)
         algorithm_config: Optional path to algorithm configuration JSON file
-        output_dir: Directory to save results
         metadata: Optional dictionary containing input data metadata for logging
 
     Returns:
         Tuple containing:
-        - Dictionary with decomposition results
-        - Dictionary with process metadata
+        - Dictionary with decomposition results containing:
+          * sources: Estimated sources
+          * spikes: Spike timing dictionary
+          * silhouette: Quality metrics
+        - Dictionary with processing metadata
     """
     # Initialize logger
     logger = AlgorithmLogger()
 
     # Set input data information
     if metadata:
-        logger.set_input_data(
-            file_name=metadata["filename"], file_format=metadata["format"]
-        )
+        logger.set_input_data(file_name=metadata["filename"], file_format=metadata["format"])
     else:
         logger.set_input_data(file_name="numpy_array", file_format="npy")
 
     # Load and set algorithm configuration
     if algorithm_config:
-        algo_cfg = load_config(algorithm_config)["Config"]
+        # Handle nested Config structure if present
+        if "Config" in algorithm_config:
+            algo_cfg = algorithm_config["Config"]
+        else:
+            # Assume the dict is the config itself
+            algo_cfg = algorithm_config
         logger.set_algorithm_config(algo_cfg)
     else:
+        # Load default configuration
         config_dir = Path(__file__).parent.parent.parent / "configs"
         algorithm_config = config_dir / "cbss.json"
         if not algorithm_config.exists():
@@ -296,15 +342,14 @@ def decompose_cbss(
         algo_cfg = load_config(algorithm_config)["Config"]
         logger.set_algorithm_config(algo_cfg)
 
-    # Create a unique run directory with timestamp
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    run_id = f"run_{timestamp}"
-    run_dir = os.path.join(output_dir, run_id)
-    os.makedirs(run_dir, exist_ok=True)
-
     try:
+        # Apply start and end time to data
+        start_time = algo_cfg["start_time"] * algo_cfg["sampling_frequency"]
+        end_time = algo_cfg["end_time"] * algo_cfg["sampling_frequency"]
+        data = data[:, int(start_time):int(end_time)]
+
         # Initialize and run CBSS with config
-        cbss = basic_cBSS(config=SimpleNamespace(**algo_cfg))
+        cbss = CBSS(config=SimpleNamespace(**algo_cfg))
         sources, spikes, sil, _ = cbss.decompose(
             data, fsamp=algo_cfg["sampling_frequency"]
         )
@@ -312,70 +357,95 @@ def decompose_cbss(
         # Prepare results
         results = {"sources": sources, "spikes": spikes, "silhouette": sil}
 
-        # Save results using the optimized format
-        save_decomposition_results(
-            run_dir, results, {}, fsamp=algo_cfg["sampling_frequency"]
-        )
-
-        print(f"[INFO] Decomposition completed successfully at {run_dir}")
+        print(f"[INFO] CBSS decomposition completed successfully")
         logger.set_return_code("cbss", 0)
 
     except Exception as e:
-        print(f"[ERROR] Decomposition failed: {str(e)}")
+        print(f"[ERROR] CBSS decomposition failed: {str(e)}")
         logger.set_return_code("cbss", 1)
-        results = None
-
-    # Log output files
-    for root, _, files in os.walk(run_dir):
-        for file in files:
-            file_path = os.path.join(root, file)
-            logger.add_output(file_path, os.path.getsize(file_path))
-
-    # Finalize and save the log
-    log_path = logger.finalize(run_dir)
-    print(f"Run log saved to: {log_path}")
-
+        results = {"sources": None, "spikes": {}, "silhouette": None}
+    
+    finally:
+        # Always finalize logger to ensure metadata is captured
+        logger.finalize()
+        
     return results, logger.log_data
 
-
-def save_decomposition_results(
-    output_dir: Path, results: Dict, metadata: Dict, fsamp: Optional[float] = None
-):
+def decompose_ae(
+    data: np.ndarray,
+    algorithm_config: Optional[Dict] = None,
+    metadata: Optional[Dict] = None,
+) -> Tuple[Dict, Dict]:
     """
-    Save decomposition results and metadata in optimized formats.
+    Run Autoencoder-based decomposition.
 
     Args:
-      output_dir: Directory to save results
-      results: Dictionary of decomposition results containing sources, spikes, silhouette, etc.
-      metadata: Dictionary with processing metadata
-      fsamp: Sampling frequency, needed for converting spikes to time format
+        data: EMG data (channels x samples)
+        algorithm_config: Optional dict with "Config" key or the raw config dict
+        metadata: Optional dict for logging (e.g., {"filename": "...", "format": "..."})
+
+    Returns:
+        results dict with:
+            - sources: (n_units x n_samples)
+            - spikes:  {unit_id: np.ndarray of sample indices}
+            - silhouette: np.ndarray
+            - mu_filters: (n_units x (m*R))
+        and the logger data dict
     """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    # 1. Save spikes as TSV in long format if fsamp is provided
-    if fsamp is not None and "spikes" in results:
-        spikes_df = spike_dict_to_long_df(results["spikes"], fsamp=fsamp)
-        spikes_path = output_dir / "predicted_timestamps.tsv"
-        spikes_df.to_csv(spikes_path, sep="\t", index=False)
+    logger = AlgorithmLogger()
 
-    # 2. Save sources as compressed NPZ
-    if "sources" in results:
-        sources_path = output_dir / "predicted_sources.npz"
-        np.savez_compressed(sources_path, sources=results["sources"])
+    # Input data metadata
+    if metadata:
+        logger.set_input_data(
+            file_name=metadata.get("filename", "numpy_array"),
+            file_format=metadata.get("format", "npy"),
+        )
+    else:
+        logger.set_input_data(file_name="numpy_array", file_format="npy")
 
-    # 3. Save silhouette scores as compressed NPZ
-    if "silhouette" in results:
-        sil_path = output_dir / "silhouette.npz"
-        np.savez_compressed(sil_path, silhouette=results["silhouette"])
+    # Load config
+    if algorithm_config:
+        algo_cfg = algorithm_config.get("Config", algorithm_config)
+        logger.set_algorithm_config(algo_cfg)
+    else:
+        config_dir = Path(__file__).parent.parent.parent / "configs"
+        config_path = config_dir / "ae_decomposer.json"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Default AE config not found at {config_path}")
+        algo_cfg = load_config(str(config_path))["Config"]
+        logger.set_algorithm_config(algo_cfg)
 
-    # 4. Save MU filters as compressed NPZ
-    if "mu_filters" in results:
-        filters_path = output_dir / "mu_filters.npz"
-        np.savez_compressed(filters_path, mu_filters=results["mu_filters"])
+    try:
+        # Build strongly-typed config directly (no key remapping)
+        ae_cfg = AEDecoderConfig(**algo_cfg)
 
-    # 5. Save metadata as JSON (keeping this for compatibility)
-    metadata_path = output_dir / "processing_metadata.json"
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+        # Slice time window using config (seconds)
+        fsamp = float(ae_cfg.sampling_frequency)
+        start_idx = int(round(ae_cfg.start_time * fsamp))
+        end_idx = int(round(ae_cfg.end_time * fsamp))
+        data = data[:, start_idx:end_idx].copy()
 
-    return output_dir
+        # Run AE
+        ae = AEDecoder(ae_cfg)
+        sources, spikes, sil, mu_filters = ae.decompose(data, fsamp=fsamp)
+
+        results = {
+            "sources": sources,
+            "spikes": spikes,
+            "silhouette": sil,
+            "mu_filters": mu_filters,
+        }
+
+        logger.set_return_code("ae_decomposer", 0)
+        print("[INFO] AE decomposition completed successfully")
+
+    except Exception as e:
+        print(f"[ERROR] AE decomposition failed: {e}")
+        logger.set_return_code("ae_decomposer", 1)
+        results = {"sources": None, "spikes": {}, "silhouette": None, "mu_filters": None}
+
+    finally:
+        # Always finalize logger to ensure metadata is captured
+        logger.finalize()
+    
+    return results, logger.log_data

@@ -15,7 +15,7 @@
     "_description": "Describes the prescribed movement scenario and force profile for the synthetic trial.",
     "TargetMuscle": "EDI",
     "MovementType": "Isometric",
-    "MovementDOF": "Flexion-Extension",
+    "MovementDOF": "Radial-Ulnar-Deviation",
     "MovementProfileParameters": {
       "EffortLevel": 10,
       "EffortProfile": "Triangular",

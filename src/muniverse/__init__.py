@@ -6,7 +6,6 @@ __version__ = "0.1.0"
 
 from muniverse import (
     algorithms,
-    data_generation,
     datasets,
     evaluation,
     utils,

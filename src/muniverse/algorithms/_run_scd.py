@@ -1,17 +1,27 @@
-# Modified from https://github.com/AgneGris/swarm-contrastive-decomposition.git
+#!/usr/bin/env python
+"""
+_run_scd.py - Container script for SCD decomposition
+
+This script receives input data (EMG data, config) and returns SCD decomposition results.
+Modified from https://github.com/AgneGris/swarm-contrastive-decomposition.git
+"""
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Tuple
-
 import numpy as np
-import torch
-from config.structures import Config, set_random_seed
-from models.scd import SwarmContrastiveDecomposition
-from processing.postprocess import save_results
 
+try:
+    import torch
+    from config.structures import Config, set_random_seed
+    from models.scd import SwarmContrastiveDecomposition
+    from processing.postprocess import save_results
+except ImportError as e:
+    print(f"Warning: Container-specific imports not available: {e}")
+    print("This script is intended to run inside a container with SCD")
 
 # Prepare the rows
 def write_spike_tsv(dictionary, output_dir):
@@ -29,7 +39,6 @@ def write_spike_tsv(dictionary, output_dir):
 
     return None
 
-
 def write_sources(dictionary, output_dir):
     sources = np.hstack(dictionary["source"])
     np.savez_compressed(output_dir / "predicted_sources.npz", predicted_sources=sources)
@@ -37,9 +46,10 @@ def write_sources(dictionary, output_dir):
     return None
 
 
-def train(data_path: str, config_path: str, output_dir: str):
+def train(run_dir: str):
     """Run SCD decomposition on EMG data."""
-    # Load and set config
+    # Load config from standardized location
+    config_path = os.path.join(run_dir, "config.json")
     with open(config_path, "r") as f:
         alg_config = json.load(f)
 
@@ -53,7 +63,8 @@ def train(data_path: str, config_path: str, output_dir: str):
     seed = alg_config.get("Seed", 42)
     set_random_seed(seed=seed)
 
-    # Load data
+    # Load data from standardized location
+    data_path = os.path.join(run_dir, "input_data.npy")
     npy_data = np.load(data_path)
     d1, d2 = npy_data.shape
     print(f"Found {d1}x{d2} data")
@@ -66,38 +77,28 @@ def train(data_path: str, config_path: str, output_dir: str):
     )
 
     # Apply time window if specified
-    neural_data = neural_data[
-        config.start_time
-        * config.sampling_frequency : config.end_time
-        * config.sampling_frequency,
-        :,
-    ]
+    start_idx = int(config.start_time * config.sampling_frequency)
+    end_idx = int(config.end_time * config.sampling_frequency)
+    neural_data = neural_data[start_idx:end_idx, :]
 
     # Initiate the model and run
     model = SwarmContrastiveDecomposition()
     predicted_timestamps, dictionary = model.run(neural_data, config)
 
-    # Save results
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    write_spike_tsv(dictionary, output_dir)
-    write_sources(dictionary, output_dir)
-    print(f"Saved results to {output_dir}")
+    # Save results to run directory
+    run_path = Path(run_dir)
+    
+    write_spike_tsv(dictionary, run_path)
+    write_sources(dictionary, run_path)
+    print(f"Saved results to {run_path}")
 
     return None
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SCD decomposition on EMG data")
-    parser.add_argument(
-        "data_path", type=str, help="Path to .npy file containing EMG data"
-    )
-    parser.add_argument(
-        "config_path", type=str, help="Path to algorithm configuration JSON file"
-    )
-    parser.add_argument("output_dir", type=str, help="Directory to save results")
-
+    parser.add_argument("--run_dir", type=str, required=True, 
+                       help="Path to run directory containing input files and where output will be saved")
+    
     args = parser.parse_args()
-
-    train(args.data_path, args.config_path, args.output_dir)
+    train(args.run_dir)
