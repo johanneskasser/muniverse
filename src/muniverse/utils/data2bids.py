@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -225,7 +226,7 @@ class bids_dataset:
 
         """
 
-        bids_version = "extension proposal for electromyography - BEP042"
+        bids_version = "1.11.0"
 
         return bids_version
 
@@ -234,24 +235,25 @@ class bids_emg_recording(bids_dataset):
     """
     Class for handling EMG recordings in BIDS format.
 
-    This class implements the BIDS standard for EMG data (BEP042), including support for
-    session-level inheritance of metadata files. By default, all metadata files are linked
+    This class implements the BIDS standard for EMG data, including support for root, subject
+    or session-level inheritance of metadata files. By default, all metadata files are linked
     to their respective recording files. However, certain metadata files can be inherited
     at the session level to avoid duplication.
 
     Inheritance Rules:
     - By default, no metadata files are inherited (all are linked to _emg.edf)
-    - Only channels.tsv, electrodes.tsv and coordsystem.json can be inherited at session level
-    - Inherited files are stored at session level with names like:
-      root/dataset/sub-01/ses-01/sub-01_ses-01_electrodes.tsv
+    - emg.json, channels.tsv, electrodes.tsv and coordsystem.json can be inherited at dataset, subject or session level
+    - Inherited files are stored at dataset, subject session level with names like:
+      -> root/dataset/electrodes.tsv
+      -> root/dataset/sub-01/sub-01_electrodes.tsv
+      -> root/dataset/sub-01/ses-01/sub-01_ses-01_electrodes.tsv
     - Non-inherited files are stored with recording files like:
       root/dataset/sub-01/ses-01/emg/sub-01_ses-01_task-rest_run-01_electrodes.tsv
     """
 
-    # Define valid metadata files that can be inherited
-    # BEP042 identifies electrodes.tsv and coordsystem.json as candidates for session level inheritance
-    # But by default, no metadata files are inherited (i.e., all are linked to the _emg.edf recording file)
-    INHERITABLE_FILES = ["channels" ,"electrodes", "coordsystem"]
+    # Define valid metadata files that can be inherited and valid inheritance levels
+    INHERITABLE_FILES = ["emg", "channels" ,"electrodes", "coordsystem"]
+    INHERITABLE_LEVELS = ["dataset" ,"subject", "session"]
 
     def __init__(
         self,
@@ -266,6 +268,7 @@ class bids_emg_recording(bids_dataset):
         overwrite=False,
         n_digits=2,
         inherited_metadata=None,
+        inherited_level=None,
         dataset_config=None
     ):
 
@@ -315,25 +318,29 @@ class bids_emg_recording(bids_dataset):
 
         # Initialize empty inheritance dictionary
         self.inherited_metadata = {}
+        self.inherited_levels = {}
 
         # Set inherited metadata if provided
         if inherited_metadata is not None:
-            self.set_inherited_metadata(inherited_metadata)
+            self._set_inherited_metadata(inherited_metadata, inherited_level)
 
-    def set_inherited_metadata(self, metadata_files):
+    def _set_inherited_metadata(self, metadata_files, inherited_level):
         """
         Set which metadata files should be inherited at session level.
 
         Parameters:
         -----------
         metadata_files : list of str
-            List of metadata file names to inherit. Must be from INHERITABLE_FILES.
+            - List of metadata file names to inherit. Must be from INHERITABLE_FILES.
             Example: ['electrodes', 'coordsystem']
+        inherited_level: list of str 
+            - Level of the inherited metadata. Must be from INHERITABLE_LEVELS
+            Examples: ['session', 'subject'] or ['dataset', 'dataset]
 
         Notes:
         ------
-        - Only channels.tsv, electrodes.tsv and coordsystem.json can be inherited
-        - Inherited files are stored at session level
+        - Only emg.sjon, channels.tsv, electrodes.tsv and coordsystem.json can be inherited
+        - Inherited files are stored at dataset, subject of session level
         - Non-inherited files are stored with their respective recording files
         """
         # Validate input
@@ -343,9 +350,23 @@ class bids_emg_recording(bids_dataset):
                 f"Invalid metadata files for inheritance: {invalid_files}. "
                 f"Valid options are: {self.INHERITABLE_FILES}"
             )
+        
+        invalid_levels = [f for f in inherited_level if f not in self.INHERITABLE_LEVELS]
+        if invalid_levels:
+            raise ValueError(
+                f"Invalid metadata files for inheritance: {invalid_levels}. "
+                f"Valid options are: {self.INHERITABLE_LEVELS}"
+            )
+        
+        if len(inherited_level) != len(metadata_files):
+            raise ValueError(
+                "The length of inherited_metadata and inherited_level must be identical."
+            )
+
 
         # Set inheritance flags
         self.inherited_metadata = {f: True for f in metadata_files}
+        self.inherited_levels = {f: inherited_level[i] for i, f in enumerate(metadata_files)}
 
     def _get_bids_filename(self, datatype, extension):
         """
@@ -353,23 +374,72 @@ class bids_emg_recording(bids_dataset):
         
         """
 
-        fname = f"sub-{self.subject_label}_"
-        folder = f"{self.root}/sub-{self.subject_label}/" 
-        if self.session is not None:
-            fname = fname + f"ses-{self._id_to_label(self.session)}_"
-            folder = folder + f"ses-{self._id_to_label(self.session)}/"
+        # Non inherited metdadata files
+        if not self.inherited_metadata.get(datatype, False) or extension=="edf": 
+            fname = f"sub-{self.subject_label}_"
+            folder = f"{self.root}/sub-{self.subject_label}/" 
 
-        if not self.inherited_metadata.get(datatype, False):     
+            if self.session is not None:
+                fname = fname + f"ses-{self._id_to_label(self.session)}_"
+                folder = folder + f"ses-{self._id_to_label(self.session)}/"
+
             fname = fname + f"task-{self.task_label}_"
             folder = folder + f"{self.datatype}/"
             if self.run > 0:
                 fname = fname + f"run-{self._id_to_label(self.run)}_"
+
+        # Inherited metdadata files
+        else:
+            level = self.inherited_levels[datatype]
+            if level == "dataset":
+                fname = ""
+                folder = f"{self.root}/"
+            elif level == "subject":
+                fname = f"sub-{self.subject_label}_"
+                folder = f"{self.root}/sub-{self.subject_label}/"
+            elif level == "session":
+                fname = f"sub-{self.subject_label}_ses-{self._id_to_label(self.session)}_"
+                folder = f"{self.root}/sub-{self.subject_label}/ses-{self._id_to_label(self.session)}/"
+           
 
         fname = fname + f"{datatype}.{extension}" 
 
         name = folder + fname   
 
         return name
+    
+    def _find_inherited_file(self, ending):
+        """
+        Automatically find metadata files that are potentially inherited.
+        
+
+        """
+
+        warnings.warn(
+            f"File *_{ending} could not be found in the expected folder."
+            "Trying to automatically search for inherited files."
+        )
+
+        searchpath = Path(self.datapath).parent.resolve()
+        stop_folder = Path(self.root).resolve()
+        
+        while True:
+            # search in current folder
+            for file in searchpath.glob(f"*{ending}"):
+                return file.resolve()
+
+            # stop if we reached the defined top-level folder
+            if searchpath == stop_folder:
+                break
+
+            # stop if we reached filesystem root (safety)
+            if searchpath.parent == searchpath:
+                break
+
+            # go one level up
+            searchpath = searchpath.parent
+
+        return None
     
     def _validate_arguments(self, subject_id, session, run, datatype, n_digits):
         """
@@ -443,13 +513,28 @@ class bids_emg_recording(bids_dataset):
         filename = self._get_bids_filename("channels", "tsv")
         if os.path.isfile(filename):
             self.channels = pd.read_table(filename, on_bad_lines="warn")
+        else:
+            filename = self._find_inherited_file("channels.tsv")
+            if os.path.isfile(filename):
+                self.channels = pd.read_table(filename, on_bad_lines="warn")
+
         filename = self._get_bids_filename("emg","json")    
         if os.path.isfile(filename):
             with open(filename, "r") as f:
                 self.emg_sidecar = json.load(f)
+        else:
+            filename = self._find_inherited_file("emg.json")
+            with open(filename, "r") as f:
+                self.emg_sidecar = json.load(f)   
+
         filename = self._get_bids_filename("electrodes","tsv")
         if os.path.isfile(filename):
             self.electrodes = pd.read_table(filename, on_bad_lines="warn")
+        else:
+            filename = self._find_inherited_file("electrodes.tsv")
+            if os.path.isfile(filename):
+                self.electrodes = pd.read_table(filename, on_bad_lines="warn")    
+
         filename = self._get_bids_filename("coordsystem","json")    
         if os.path.isfile(filename):
             with open(filename, "r") as f:
