@@ -151,7 +151,7 @@ n_sub = 1 #len(sub_id)
 
 
 subjects_data = {
-    'name': [
+    'participant_id': [
         'sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06', 'sub-07', 'sub-08',
         'sub-11', 'sub-12', 'sub-13', 'sub-14', 'sub-15', 'sub-16', 'sub-17', 'sub-18'
     ], 
@@ -235,7 +235,7 @@ for i in np.arange(len(sub_id)):
             inherited_level=["dataset", "dataset", "dataset", "dataset"]
         )
         
-        #emg_recording.set_metadata(field_name='channels', source=ch_metadata)
+        emg_recording.set_metadata(field_name='channels', source=ch_metadata)
         emg_recording.set_metadata(field_name='electrodes', source=el_metadata) 
         emg_recording.set_metadata(field_name='emg_sidecar', source=emg_sidecar)
         emg_recording.set_metadata(field_name='coord_sidecar', source=coordsystem_metadata)

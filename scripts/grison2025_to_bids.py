@@ -3,9 +3,8 @@ import pandas as pd
 import json
 import os
 from edfio import *
-from src.data_preparation.data2bids import *
-from src.data_preparation.otb_io import open_otb, format_otb_channel_metadata
-#from .sidecar_templates import emg_sidecar_template, dataset_sidecar_template
+from muniverse.utils.data2bids import *
+from muniverse.utils.otb_io import open_otb, format_otb_channel_metadata
 from pathlib import Path
 
 # Helper function for getting electrode coordinates
@@ -69,8 +68,8 @@ mvc_levels = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70]
 
 sourcepath = str(Path.home()) + '/Downloads/S1/'
 
-subjects_data = {'name': ['sub-01'], 
-            'sex': ['unknown']}
+subjects_data = {'participant_id': ['sub-01'], 
+            'sex': ['n/a']}
 dataset_sidecar = manual_metadata["DatasetDescription"] #dataset_sidecar_template(ID='Caillet2023')
 
 Grison_2025 = bids_dataset(datasetname='Grison_et_al_2025', root=str(Path.home()) + '/Downloads/')
@@ -81,20 +80,7 @@ Grison_2025.write()
 for i in np.arange(n_sub):
     for j in np.arange(len(mvc_levels)):
 
-        task = 'isometric' + str(mvc_levels[j]) + 'percentmvc'
-        # # There is no 50 percent MVC for the second subject
-        # if i==1 and j==1:
-        #     continue
-
-        # folder = 'S' + str(i+1) + '/'
-
-        # if j==0:
-        #     filename = 'S'  + str(i+1) + '_30MVC.otb+'
-        #     task = 'isometric30percentmvc'
-        # elif j==1:
-        #     filename = 'S'  + str(i+1) + '_50MVC.otb+'
-        #     task = 'isometric50percentmvc'
-
+        task = f"isometric{str(mvc_levels[j])}percentmvc"
 
         # Import daata from otb+ file
         ngrids = 9

@@ -80,7 +80,7 @@ n_mvc = 2
 
 sourcepath = str(Path.home()) + '/Downloads/Supplementary_data-1/RAW_HDEMG_SIGNALS/'
 
-subjects_data = {'name': ['sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06'], 
+subjects_data = {'participant_id': ['sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06'], 
             'sex': ['M', 'M', 'M', 'M', 'M', 'M']}
 dataset_sidecar = manual_metadata["DatasetDescription"] #dataset_sidecar_template(ID='Caillet2023')
 
@@ -128,7 +128,14 @@ for i in np.arange(n_sub):
 
 
         # Make a recording and add data and metadata
-        emg_recording = bids_emg_recording(data_obj=Caillet_2023,subject=int(i+1), task=task, datatype='emg')
+        emg_recording = bids_emg_recording(
+            dataset_config=Caillet_2023,
+            subject_id=int(i+1), 
+            task_label=task, 
+            datatype='emg',
+            inherited_metadata=["emg", "channels", "electrodes", "coordsystem"],
+            inherited_level=["dataset", "dataset", "dataset", "dataset"]
+        )
         emg_recording.set_metadata(field_name='channels', source=ch_metadata)
         emg_recording.set_metadata(field_name='electrodes', source=el_metadata) 
         emg_recording.set_metadata(field_name='emg_sidecar', source=emg_sidecar)
