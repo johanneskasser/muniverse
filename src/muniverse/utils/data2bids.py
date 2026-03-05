@@ -6,24 +6,29 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from edfio import Edf, EdfSignal, read_edf
+#from edfio import Edf, EdfSignal, read_edf
+from pyedflib.highlevel import read_edf, write_edf, make_header
 
 
 class bids_dataset:
 
     def __init__(
-        self, datasetname="dataset_name", root="./", n_digits=2, overwrite=False
+        self, 
+        datasetname="dataset_name", 
+        root="./", 
+        n_digits=2, 
+        overwrite=False
     ):
 
         self.root = root + datasetname
         self.datasetname = datasetname
         self.dataset_sidecar = {
             "Name": datasetname,
-            "BIDSversion": self._get_bids_version(),
+            "BIDSVersion": self._get_bids_version(),
         }
         self.subjects_sidecar = self._set_participant_sidecar()
         self.subjects_data = pd.DataFrame(
-            columns=["name", "age", "sex", "hand", "weight", "height"]
+            columns=["participant_id", "age", "sex", "handedness", "weight", "height"]
         )
         self.n_digits = n_digits
         self.overwrite = overwrite
@@ -41,11 +46,11 @@ class bids_dataset:
         # write participant.tsv
         name = self.root + "/" + "participants.tsv"
         if self.overwrite or not os.path.isfile(name):
-            self.subjects_data.to_csv(name, sep="\t", index=False, header=True)
+            self.subjects_data.to_csv(name, sep="\t", index=False, header=True, na_rep="n/a")
         elif not self.overwrite and os.path.isfile(name):
             from_file = pd.read_table(name)
             if not from_file.equals(self.subjects_data):
-                self.subjects_data.to_csv(name, sep="\t", index=False, header=True)
+                self.subjects_data.to_csv(name, sep="\t", index=False, header=True, na_rep="n/a")
         # write participant.json
         name = self.root + "/" + "participants.json"
         if self.overwrite or not os.path.isfile(name):
@@ -124,8 +129,8 @@ class bids_dataset:
             raise TypeError(f"Unsupported target type for '{field_name}'")
 
         if field_name == "subjects_data":
-            current.drop_duplicates(subset="name", keep="last")
-            current.sort_values("name")
+            current.drop_duplicates(subset="participant_id", keep="last")
+            current.sort_values("participant_id")
 
         # Update field
         setattr(self, field_name, current)
@@ -188,7 +193,9 @@ class bids_dataset:
         """
 
         metadata = {
-            "name": {"Description": "Unique subject identifier"},
+            "participant_id": {
+                "Description": "Unique subject identifier"
+            },
             "age": {
                 "Description": "Age of the participant at time of testing",
                 "Unit": "years",
@@ -201,8 +208,14 @@ class bids_dataset:
                 "Description": "handedness of the participant as reported by the participant",
                 "Levels": {"L": "left", "R": "right"},
             },
-            "weight": {"Description": "Body weight of the participant", "Unit": "kg"},
-            "height": {"Description": "Body height of the participant", "Unit": "m"},
+            "weight": {
+                "Description": "Body weight of the participant", 
+                "Unit": "kg"
+            },
+            "height": {
+                "Description": "Body height of the participant", 
+                "Unit": "m"
+            },
         }
 
         return metadata
@@ -267,6 +280,7 @@ class bids_emg_recording(bids_dataset):
         datasetname="dataset_name",
         overwrite=False,
         n_digits=2,
+        fileformat="edf",
         inherited_metadata=None,
         inherited_level=None,
         dataset_config=None
@@ -299,14 +313,14 @@ class bids_emg_recording(bids_dataset):
         # Store essential information for BIDS compatible folder structure in a dictonary
         self.datapath = datapath
         self.n_digits = n_digits
-        #self.subject_id = subject_id
         self.subject_label = f"{subject_desc}{self._id_to_label(subject_id)}"
         self.task_label = task_label
-        #self.task = "task-" + task_label
         self.session = session
         self.run = run
         self.datatype = datatype
-        self.emg_data = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        #self.emg_data = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        self.emg_data = np.empty([1,1])
+        self.fileformat = fileformat
 
         # Initialize metadata
         self.channels = pd.DataFrame(columns=["name", "type", "unit"])
@@ -314,7 +328,11 @@ class bids_emg_recording(bids_dataset):
             columns=["name", "x", "y", "z", "coordinate_system"]
         )
         self.emg_sidecar = self._init_emg_sidecar()
-        self.coord_sidecar = {"EMGCoordinateSystem": [], "EMGCoordinateUnits": []}
+        self.coord_sidecar = {
+            "EMGCoordinateSystem": "Other",
+            "EMGCoordinateSystemDescription": "Free-form text description of the coordinate system", 
+            "EMGCoordinateUnits": "mm"
+        }
 
         # Initialize empty inheritance dictionary
         self.inherited_metadata = {}
@@ -468,12 +486,13 @@ class bids_emg_recording(bids_dataset):
         """
 
         metadata = {
-            "EMGPlacementScheme": [],
-            "EMGReference": [],
-            "SamplingFrequency": [],
-            "PowerLineFrequency": [],
-            "SoftwareFilters": [],
-            "TaskName": [],
+            "EMGPlacementScheme": "Must be one of: ChannelSpecific, Measured or Other",
+            "EMGPlacementSchemeDescription": "Details about EMG sensor placement",
+            "EMGReference": "Description of the approach to signal referencing",
+            "SamplingFrequency": 2048,
+            "PowerLineFrequency": 50,
+            "SoftwareFilters": "Object of temporal software filters applied, or n/a if the data is not available",
+            "RecordingType": "Must be one of: continuous, epoched or discontinuous",
         }
 
         return metadata
@@ -491,17 +510,26 @@ class bids_emg_recording(bids_dataset):
 
         # Write files
         filename = self._get_bids_filename("channels", "tsv")
-        self.channels.to_csv(filename, sep="\t", index=False, header=True)
+        self.channels.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
         filename = self._get_bids_filename("emg","json")
         with open(filename, "w") as f:
             json.dump(self.emg_sidecar, f)
         filename = self._get_bids_filename("electrodes","tsv")
-        self.electrodes.to_csv(filename, sep="\t", index=False, header=True)
+        self.electrodes.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
         filename = self._get_bids_filename("coordsystem","json")
         with open(filename, "w") as f:
             json.dump(self.coord_sidecar, f)
-        filename = self._get_bids_filename("emg","edf")
-        self.emg_data.write(filename)
+        filename = self._get_bids_filename("emg", self.fileformat)
+        #self.emg_data.write(filename)
+        if self.emg_data.shape[0] != len(self.channels):
+            channel_names = [f"Ch{i}" for i in range(self.emg_data.shape[0])]
+        else:
+            channel_names = self.channels["name"].values.tolist()
+        signal_headers = make_header(
+            channel_names, 
+            sample_frequency=self.emg_sidecar["SamplingFrequency"]
+        )
+        write_edf(filename, self.emg_data, signal_headers)
 
     def read(self):
         """
@@ -539,9 +567,10 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             with open(filename, "r") as f:
                 self.coord_sidecar = json.load(f)
-        filename = self._get_bids_filename("emg", "edf")
+        filename = self._get_bids_filename("emg", self.fileformat)
         if os.path.isfile(filename):
-            self.emg_data = read_edf(filename)
+            #self.emg_data = read_edf(filename)
+            self.emg_data, _, _ = read_edf(filename)
 
     def set_metadata(self, field_name, source):
 
@@ -576,15 +605,18 @@ class bids_emg_recording(bids_dataset):
         signal = np.zeros([int(seconds * fsamp), mydata.shape[1]])
         signal[0 : mydata.shape[0], :] = mydata
 
-        # Initalize
-        edf = Edf([EdfSignal(signal[:, 0], sampling_frequency=fsamp)])
-
-        for i in np.arange(1, signal.shape[1]):
-            new_signal = EdfSignal(signal[:, i], sampling_frequency=fsamp)
-            edf.append_signals(new_signal)
+        ## Initalize
+        #edf = Edf([EdfSignal(signal[:, 0], sampling_frequency=fsamp)])
+        #
+        #for i in np.arange(1, signal.shape[1]):
+        #    new_signal = EdfSignal(signal[:, i], sampling_frequency=fsamp)
+        #    edf.append_signals(new_signal)
 
         # Set data
-        setattr(self, field_name, edf)
+        setattr(self, field_name, signal)
+
+        # Update Sampling Rate
+        self.emg_sidecar["SamplingFrequency"] = fsamp
 
         return ()
 
@@ -622,6 +654,7 @@ class bids_neuromotion_recording(bids_emg_recording):
         dataset_config=None,
         root="./",
         datasetname="dataset_name",
+        fileformat="edf",
         overwrite=False,
         n_digits=2,
         inherited_metadata=None,
@@ -641,6 +674,7 @@ class bids_neuromotion_recording(bids_emg_recording):
             dataset_config=dataset_config,
             root=root,
             datasetname=datasetname,
+            fileformat=fileformat,
             overwrite=overwrite,
             n_digits=n_digits,
             inherited_metadata=inherited_metadata,
@@ -661,7 +695,8 @@ class bids_neuromotion_recording(bids_emg_recording):
                 "angle",
             ]
         )
-        self.internals = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        #self.internals = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        self.internals = np.empty([1,1])
         self.internals_sidecar = pd.DataFrame(
             columns=["name", "type", "units", "description"]
         )
@@ -674,16 +709,23 @@ class bids_neuromotion_recording(bids_emg_recording):
 
         # Write simulation-specific files
         filename = self._get_bids_filename("spikes","tsv")
-        self.spikes.to_csv(filename, sep="\t", index=False, header=True)
+        self.spikes.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
         filename = self._get_bids_filename("motorunits","tsv")
-        self.motor_units.to_csv(filename, sep="\t", index=False, header=True)
+        self.motor_units.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
         filename = self._get_bids_filename("internals","tsv")
-        self.internals_sidecar.to_csv(filename, sep="\t", index=False, header=True)
+        self.internals_sidecar.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
         filename = self._get_bids_filename("simulation","json")
         with open(filename, "w") as f:
             json.dump(self.simulation_sidecar, f)
         filename = self._get_bids_filename("internals","edf")    
-        self.internals.write(filename)
+        #self.internals.write_edf(filename)
+
+        channel_names = [f"{i}" for i in range(self.internals.shape[0])]
+        signal_headers = make_header(
+            channel_names, 
+            sample_frequency=self.emg_sidecar["SamplingFrequency"]
+        )
+        write_edf(filename, self.internals, signal_headers)
 
     def read(self):
         """Override read method to include simulated data"""
@@ -708,9 +750,11 @@ class bids_neuromotion_recording(bids_emg_recording):
         if os.path.isfile(filename):
             with open(filename, "r") as f:
                 self.simulation_sidecar = json.load(f)
-        filename = self._get_bids_filename("internals","edf")         
+        filename = self._get_bids_filename("internals", self.fileformat)
         if os.path.isfile(filename):
-            self.internals = read_edf(filename)
+            #self.internals = read_edf(filename)
+            self.internals, _, _ = read_edf(filename)
+
 
 
 class bids_decomp_derivatives(bids_emg_recording):
@@ -729,6 +773,7 @@ class bids_decomp_derivatives(bids_emg_recording):
         session=None,
         desc_label="decomposed",
         root="./",
+        fileformat="edf",
         overwrite=False,
         n_digits=2,
     ):
@@ -746,7 +791,6 @@ class bids_decomp_derivatives(bids_emg_recording):
 
         # Store essential information for BIDS compatible folder structure in a dictonary
         self.datapath = datapath
-        #self.subject_id = subject_id
         self.subject_label = f"{subject_desc}{self._id_to_label(subject_id)}"
         self.task = "task-" + task_label
         self.session = session
@@ -755,6 +799,7 @@ class bids_decomp_derivatives(bids_emg_recording):
         self.n_digits = n_digits
         self.run = run
         self.datatype = datatype
+        self.fileformat = fileformat
 
         # Adopt labels from an emg recording in BIDS format
         if isinstance(rec_config, bids_emg_recording):
@@ -779,12 +824,13 @@ class bids_decomp_derivatives(bids_emg_recording):
         self.derivative_datapath = self.root + datapath
         self.pipelinename = pipelinename
 
-        self.source = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        #self.source = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        self.source = np.empty([1, 1])
         self.spikes = pd.DataFrame(columns=["unit_id", "spike_time", "timestamp"])
         self.pipeline_sidecar = {"PipelineName": pipelinename}
         self.dataset_sidecar = {
             "Name": datasetname + "_" + pipelinename,
-            "BIDSversion": self._get_bids_version(),
+            "BIDSVersion": self._get_bids_version(),
             "GeneratedBy": pipelinename,
         }
 
@@ -807,7 +853,7 @@ class bids_decomp_derivatives(bids_emg_recording):
 
         # write *_predictedspikes.tsv
         self.spikes.to_csv(
-            name + "events.tsv", sep="\t", index=False, header=True
+            name + "events.tsv", sep="\t", index=False, header=True, na_rep="n/a"
         )
         # write *_pipeline.json
         fname = name + self.datatype + ".json"
@@ -847,7 +893,8 @@ class bids_decomp_derivatives(bids_emg_recording):
         # read *.edf file
         fname = name + self.datatype + ".edf"
         if os.path.isfile(fname):
-            self.source = read_edf(fname)
+            #self.source = read_edf(fname)
+            self.source, _, _ = read_edf(fname)
         # read dataset.json
         fname = self.root + "/" + "dataset.json"
         if os.path.isfile(fname):
@@ -872,20 +919,20 @@ class bids_decomp_derivatives(bids_emg_recording):
         self.spikes = self.spikes.drop_duplicates(subset=["source_id", "spike_time"])
 
 
-def edf_to_numpy(edf_data, idx):
-    """
-    Output data of selcetd channels as numpy array
-
-    Args:
-        edf_data (edf): Time series data in edf format
-        idx (ndarray): Indices of the channels to be stored
-
-    Returns:
-        np_data (np.ndarray): Time series data
-    """
-
-    np_data = np.zeros((edf_data.signals[idx[0]].data.shape[0], len(idx)))
-    for i in np.arange(len(idx)):
-        np_data[:, i] = edf_data.signals[idx[i]].data
-
-    return np_data
+#def edf_to_numpy(edf_data, idx):
+#    """
+#    Output data of selcetd channels as numpy array
+#
+#    Args:
+#        edf_data (edf): Time series data in edf format
+#        idx (ndarray): Indices of the channels to be stored
+#
+#    Returns:
+#        np_data (np.ndarray): Time series data
+#    """
+#
+#    np_data = np.zeros((edf_data.signals[idx[0]].data.shape[0], len(idx)))
+#    for i in np.arange(len(idx)):
+#        np_data[:, i] = edf_data.signals[idx[i]].data
+#
+#    return np_data

@@ -23,7 +23,7 @@ dependencies = [
     "pandas",
     "scikit-learn",
     "easyDataverse",
-    "edfio",
+    "pyedflib,
     "python-dateutil",
 ]
 
