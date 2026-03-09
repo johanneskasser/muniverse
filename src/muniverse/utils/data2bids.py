@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-#from edfio import Edf, EdfSignal, read_edf
+#from edfio import Edf, Bdf, EdfSignal, read_edf, read_bdf
 from pyedflib.highlevel import read_edf, write_edf, make_header
 
 
@@ -266,7 +266,9 @@ class bids_emg_recording(bids_dataset):
 
     # Define valid metadata files that can be inherited and valid inheritance levels
     INHERITABLE_FILES = ["emg", "channels" ,"electrodes", "coordsystem"]
-    INHERITABLE_LEVELS = ["dataset" ,"subject", "session"]
+    INHERITABLE_LEVELS = ["dataset" , "task", "subject", "session"]
+    # Define permissible raw data formats
+    FILE_FORMATS = ["edf", "bdf"]
 
     def __init__(
         self,
@@ -320,7 +322,10 @@ class bids_emg_recording(bids_dataset):
         self.datatype = datatype
         #self.emg_data = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
         self.emg_data = np.empty([1,1])
-        self.fileformat = fileformat
+        if fileformat in self.FILE_FORMATS:
+            self.fileformat = fileformat
+        else:
+            raise ValueError(f"Invalid fileformat: {fileformat}")
 
         # Initialize metadata
         self.channels = pd.DataFrame(columns=["name", "type", "unit"])
@@ -329,9 +334,11 @@ class bids_emg_recording(bids_dataset):
         )
         self.emg_sidecar = self._init_emg_sidecar()
         self.coord_sidecar = {
-            "EMGCoordinateSystem": "Other",
-            "EMGCoordinateSystemDescription": "Free-form text description of the coordinate system", 
-            "EMGCoordinateUnits": "mm"
+            "mycoordsystemname": {
+                "EMGCoordinateSystem": "Other",
+                "EMGCoordinateSystemDescription": "Free-form text description of the coordinate system", 
+                "EMGCoordinateUnits": "mm"
+            }
         }
 
         # Initialize empty inheritance dictionary
@@ -393,7 +400,7 @@ class bids_emg_recording(bids_dataset):
         """
 
         # Non inherited metdadata files
-        if not self.inherited_metadata.get(datatype, False) or extension=="edf": 
+        if not self.inherited_metadata.get(datatype, False) or extension in self.FILE_FORMATS: 
             fname = f"sub-{self.subject_label}_"
             folder = f"{self.root}/sub-{self.subject_label}/" 
 
@@ -412,6 +419,9 @@ class bids_emg_recording(bids_dataset):
             if level == "dataset":
                 fname = ""
                 folder = f"{self.root}/"
+            elif level == "task":
+                fname = self.task_label
+                folder = f"{self.root}/"
             elif level == "subject":
                 fname = f"sub-{self.subject_label}_"
                 folder = f"{self.root}/sub-{self.subject_label}/"
@@ -419,8 +429,12 @@ class bids_emg_recording(bids_dataset):
                 fname = f"sub-{self.subject_label}_ses-{self._id_to_label(self.session)}_"
                 folder = f"{self.root}/sub-{self.subject_label}/ses-{self._id_to_label(self.session)}/"
            
-
-        fname = fname + f"{datatype}.{extension}" 
+        if datatype is None:
+            pass
+        elif extension is None:
+            fname = fname + f"{datatype}"
+        else:
+            fname = fname + f"{datatype}.{extension}" 
 
         name = folder + fname   
 
@@ -440,11 +454,16 @@ class bids_emg_recording(bids_dataset):
 
         searchpath = Path(self.datapath).parent.resolve()
         stop_folder = Path(self.root).resolve()
+
+        files = list()
         
         while True:
             # search in current folder
             for file in searchpath.glob(f"*{ending}"):
-                return file.resolve()
+                files.append(file.resolve())
+
+            if len(files) > 0:
+                return files   
 
             # stop if we reached the defined top-level folder
             if searchpath == stop_folder:
@@ -511,14 +530,20 @@ class bids_emg_recording(bids_dataset):
         # Write files
         filename = self._get_bids_filename("channels", "tsv")
         self.channels.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
+
         filename = self._get_bids_filename("emg","json")
         with open(filename, "w") as f:
             json.dump(self.emg_sidecar, f)
+
         filename = self._get_bids_filename("electrodes","tsv")
         self.electrodes.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
-        filename = self._get_bids_filename("coordsystem","json")
-        with open(filename, "w") as f:
-            json.dump(self.coord_sidecar, f)
+
+        filename = self._get_bids_filename("space-", None)
+        for name, metadata in vars(self.coord_sidecar).items():
+            filename2 = f"{filename}{name}_coordsystem.json"
+            with open(filename2, "w") as f:
+                json.dump(metadata, f)
+
         filename = self._get_bids_filename("emg", self.fileformat)
         #self.emg_data.write(filename)
         if self.emg_data.shape[0] != len(self.channels):
@@ -542,7 +567,7 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             self.channels = pd.read_table(filename, on_bad_lines="warn")
         else:
-            filename = self._find_inherited_file("channels.tsv")
+            filename = self._find_inherited_file("channels.tsv")[0]
             if os.path.isfile(filename):
                 self.channels = pd.read_table(filename, on_bad_lines="warn")
 
@@ -551,7 +576,7 @@ class bids_emg_recording(bids_dataset):
             with open(filename, "r") as f:
                 self.emg_sidecar = json.load(f)
         else:
-            filename = self._find_inherited_file("emg.json")
+            filename = self._find_inherited_file("emg.json")[0]
             with open(filename, "r") as f:
                 self.emg_sidecar = json.load(f)   
 
@@ -559,14 +584,26 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             self.electrodes = pd.read_table(filename, on_bad_lines="warn")
         else:
-            filename = self._find_inherited_file("electrodes.tsv")
+            filename = self._find_inherited_file("electrodes.tsv")[0]
             if os.path.isfile(filename):
                 self.electrodes = pd.read_table(filename, on_bad_lines="warn")    
 
-        filename = self._get_bids_filename("coordsystem","json")    
-        if os.path.isfile(filename):
-            with open(filename, "r") as f:
-                self.coord_sidecar = json.load(f)
+        serach_parts = [Path(self._get_bids_filename(None, None)).name, "coordsystem"]
+        filename = [f for f in Path(self.datapath).iterdir()
+                    if all(part in f.name for part in serach_parts)]
+        if len(filename) == 0:
+            filename = self._find_inherited_file("coordsystem.json")
+        self.coord_sidecar = {}
+        for i in range(len(filename)):  
+            if os.path.isfile(filename[i]):
+                coordname = re.search(fr"space-([^-_]+)", filename[i].name)
+                if coordname is None:
+                    coordname = "global"
+                else:
+                    coordname = coordname.group(1)
+                with open(filename[i], "r") as f:
+                    self.coord_sidecar.update({coordname: json.load(f)})
+
         filename = self._get_bids_filename("emg", self.fileformat)
         if os.path.isfile(filename):
             #self.emg_data = read_edf(filename)
