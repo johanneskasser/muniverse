@@ -20,8 +20,8 @@ class BaseMetadataLogger:
         """Initialize the base metadata logger."""
         self.start_time = datetime.now()
         self.log_data = {
-            "BIDSVersion": "1.11.1",
-            "DatasetType": "derivative",
+            #"BIDSVersion": "1.11.1",
+            #"DatasetType": "derivative",
             "PipelineDescription": {
                 "Name": "MUniverse",
                 "Version": "1.0.0",
