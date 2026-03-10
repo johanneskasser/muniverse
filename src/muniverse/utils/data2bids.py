@@ -149,6 +149,7 @@ class bids_dataset:
 
         filename = Path(file).name
         label = re.search(fr"{key}-([^-_]+)", filename)
+        label = label.group(1) if label else None
 
         return label
         
@@ -414,7 +415,7 @@ class bids_emg_recording(bids_dataset):
             fname = f"sub-{self.subject_label}_"
             folder = f"{self.root}/sub-{self.subject_label}/" 
 
-            if self.session is not None:
+            if self.session_label is not None:
                 fname = fname + f"ses-{self.session_label}_"
                 folder = folder + f"ses-{self.session_label}/"
 
@@ -697,14 +698,14 @@ class bids_emg_recording(bids_dataset):
     def read_data_frame(self, df, idx):
         self.subject_label = df.loc[idx, "sub"]
         label = df.loc[idx, "ses"]
-        self.session_label = label if label else None
+        self.session_label = label if type(label) is str else None
         self.task_label = df.loc[idx, "task"]
         label = df.loc[idx, "acq"]
-        self.acq_label = label if label else None
+        self.acq_label = label if type(label) is str else None
         label = df.loc[idx, "run"]
-        self.run_label = label if label else None
+        self.run_label = label if type(label) is str else None
         label = df.loc[idx, "recording"]
-        self.recording_label = label if label else None
+        self.recording_label = label if type(label) is str else None
         self.datatype = df.loc[idx, "suffix"]
         self.datapath = df.loc[idx, "file_path"] + "/"
         self.datasetname = df.loc[idx, "dataset_name"]
