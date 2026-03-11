@@ -672,27 +672,21 @@ class bids_emg_recording(bids_dataset):
 
         Args:
             field_name (str): name of the field to be updated
-            mydata (np.ndarry): data matrix (n_samples x n_channels)
+            mydata (np.ndarry): data matrix (n_channels x n_samples)
             fsamp (float): Sampling frequency in Hz
 
         """
 
         # Add zeros to the signal such that the total length is in full seconds
-        seconds = np.ceil(mydata.shape[0] / fsamp)
-        signal = np.zeros([int(seconds * fsamp), mydata.shape[1]])
-        signal[0 : mydata.shape[0], :] = mydata
+        seconds = np.ceil(mydata.shape[1] / fsamp)
+        signal = np.zeros([mydata.shape[0], int(seconds * fsamp)])
+        signal[:, 0 : mydata.shape[1]] = mydata
 
-        ## Initalize
-        #edf = Edf([EdfSignal(signal[:, 0], sampling_frequency=fsamp)])
-        #
-        #for i in np.arange(1, signal.shape[1]):
-        #    new_signal = EdfSignal(signal[:, i], sampling_frequency=fsamp)
-        #    edf.append_signals(new_signal)
-
-        # Set data
         setattr(self, field_name, signal)
 
-        return ()
+        if field_name == "emg_data":
+            self.emg_sidecar["SamplingFrequency"] = fsamp
+
 
     def read_data_frame(self, df, idx):
         self.subject_label = df.loc[idx, "sub"]
@@ -711,7 +705,6 @@ class bids_emg_recording(bids_dataset):
 
         self.read()
 
-        return ()
 
 class bids_neuromotion_recording(bids_emg_recording):
     """
@@ -839,6 +832,13 @@ class bids_neuromotion_recording(bids_emg_recording):
 
 class bids_decomp_derivatives(bids_emg_recording):
 
+    BIDSIGNORE = [
+        "*_sources.edf",
+        "*_sources.bdf",
+        "*_sources.json",
+        "descriptions.tsv"
+    ]
+
     def __init__(
         self,
         pipelinename="pipeline-name",
@@ -909,13 +909,52 @@ class bids_decomp_derivatives(bids_emg_recording):
 
         #self.source = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
         self.source = np.empty([1, 1])
-        self.spikes = pd.DataFrame(columns=["unit_id", "spike_time", "timestamp"])
-        self.pipeline_sidecar = {"PipelineName": pipelinename, "SamplingFrequency": fsamp}
+        self.events = pd.DataFrame(columns=["onset", "duration", "sample", "unit_id", "event_description"])
+        self.events_sidecar = self._init_event_sidecar()
+        self.descriptions = pd.DataFrame(columns=["desc_id", "description"])
+        self.descriptions.loc[0, "desc_id"] = "decomposed"
+        self.descriptions.loc[0, "description"] = "estimated spiking motor unit activity"
+        self.source_sidecar = {
+            "SamplingFrequency": fsamp,
+            "NumberOfSources": 1
+        }
         self.dataset_sidecar = {
             "Name": datasetname + "_" + pipelinename,
             "BIDSVersion": self._get_bids_version(),
-            "GeneratedBy": pipelinename,
+            "GeneratedBy": [{
+                "Name": pipelinename
+            }]
         }
+
+    def _init_event_sidecar(self):
+        """
+        Set up a template for the event sidecar json file
+        
+        """    
+
+        metadata = {
+            "onset": {
+                "Description": "Onset time of the event in seconds from recording start.",
+                "Unit": "s"
+            },
+            "duration": {
+                "Description": "Duration of the event in seconds. A value of zero means that the event is a dirac pulse",
+                "Unit": "s"
+            },
+            "sample": {
+                "Description": "Sample index of the event onset (zero-indexing)",
+                "Unit": "samples"
+            },
+            "unit_id": {
+                "Description": "Unique identifier (integer value) of the motor unit corresponding to the detected spike.",
+                "Unit": "Integer-based ID"
+            },
+            "event_description": {
+                "Description": "Free text event description."
+            }
+        }
+
+        return metadata
 
     def write(self):
         """
@@ -939,28 +978,46 @@ class bids_decomp_derivatives(bids_emg_recording):
         name = f"{name}desc-{self.desc_label}_"    
 
         # write *_predictedspikes.tsv
-        self.spikes.to_csv(
+        self.events.to_csv(
             name + "events.tsv", sep="\t", index=False, header=True, na_rep="n/a"
         )
         # write *_pipeline.json
-        fname = name + self.datatype + ".json"
+        fname = name + "sources.json"
         with open(fname, "w") as f:
-            json.dump(self.pipeline_sidecar, f)
-        # write *_predictedsources.edf file
-        filename = f"{name}{self.datatype}.{self.fileformat}"
+            json.dump(self.source_sidecar, f)
+        # write *_desc-decomposed_emg.edf file
+        filename = f"{name}sources.{self.fileformat}"
         #self.emg_data.write(filename)
-        channel_names = [f"Ch{i}" for i in range(self.source.shape[0])]
+        channel_names = [f"Unit_{i}" for i in range(self.source.shape[0])]
         signal_headers = make_signal_headers(
             channel_names, 
-            sample_frequency=self.pipeline_sidecar["SamplingFrequency"]
+            sample_frequency=self.source_sidecar["SamplingFrequency"]
         )
         write_edf(filename, self.source, signal_headers)
         #self.source.write(name + self.datatype + self.fileformat)
         # write dataset.json
-        fname = self.root + "/dataset_description.json"
+        fname = self.root + "dataset_description.json"
         if self.overwrite or not os.path.isfile(fname):
             with open(fname, "w") as f:
                 json.dump(self.dataset_sidecar, f)
+
+        # write events.json
+        fname = self.root + "events.json"
+        if self.overwrite or not os.path.isfile(fname):
+            with open(fname, "w") as f:
+                json.dump(self.events_sidecar, f)      
+
+        # write descriptions.tsv
+        fname = self.root + "descriptions.tsv" 
+        if self.overwrite or not os.path.isfile(fname):
+            self.descriptions.to_csv(
+                fname, sep="\t", index=False, header=True, na_rep="n/a"
+            )
+
+        # write .bidsignore
+        fname = Path(self.root) / ".bidsignore"
+        fname.write_text("\n".join(self.BIDSIGNORE) + "\n")
+                   
 
     def read(self):
         """
@@ -984,39 +1041,65 @@ class bids_decomp_derivatives(bids_emg_recording):
         # read *_predictedspikes.tsv
         fname = name + "events.tsv"
         if os.path.isfile(fname):
-            self.spikes = pd.read_table(fname, on_bad_lines="warn")
+            self.events = pd.read_table(fname, on_bad_lines="warn")
         # read *_pipeline.json
-        fname = name + self.datatype + ".json"
+        fname = name + "sources.json"
         if os.path.isfile(fname):
             with open(fname, "r") as f:
-                self.pipeline_sidecar = json.load(f)
+                self.source_sidecar = json.load(f)
         # read *.edf file
-        fname = name + self.datatype + self.fileformat
+        fname = name + "sources" + self.fileformat
         if os.path.isfile(fname):
             #self.source = read_edf(fname)
             self.source, _, _ = read_edf(fname)
         # read dataset.json
-        fname = self.root + "/" + "dataset_description.json"
+        fname = self.root + "dataset_description.json"
         if os.path.isfile(fname):
             with open(fname, "r") as f:
                 self.dataset_sidecar = json.load(f)
+        # write events.json
+        fname = self.root + "events.json"
+        if os.path.isfile(fname):
+            with open(fname, "r") as f:
+                self.events_sidecar = json.load(f)          
+        # read descriptions.tsv
+        fname = self.root + "descriptions.tsv" 
+        if os.path.isfile(fname):
+            self.descriptions = pd.read_table(fname, on_bad_lines="warn")        
 
-    def add_spikes(self, spikes):
+    def add_spikes(self, spikes, fsamp):
         """
         Convert a dictionary of spike times to long-format TSV-style DataFrame.
 
         Parameters:
-            spike_dict (dict): {source_id: list of spike times}
+            spike_dict (dict): {source_id: list of spike timings (in samples)}
+            fsamp(float): Sampling frequency in Hz
 
         """
         rows = []
         for unit_id, spike_times in spikes.items():
             for t in spike_times:
-                rows.append({"source_id": unit_id, "spike_time": t})
+                rows.append({
+                    "onset": t/fsamp,
+                    "duration": 0,
+                    "sample": t,
+                    "unit_id": unit_id, 
+                    "event_description": "Motor-unit-spike"
+                })
 
-        frames = [self.spikes, pd.DataFrame(rows)]
-        self.spikes = pd.concat(frames, ignore_index=True)
-        self.spikes = self.spikes.drop_duplicates(subset=["source_id", "spike_time"])
+        frames = [self.events, pd.DataFrame(rows)]
+        frames = [f for f in frames if not f.empty]
+        self.events = pd.concat(frames, ignore_index=True)
+        self.events = self.events.drop_duplicates(subset=["onset", "unit_id", "sample"])
+        self.events = self.events.sort_values(by=["onset"])
+
+    def set_data(self, field_name, mydata, fsamp):
+
+        super().set_data(field_name, mydata, fsamp)
+
+        if field_name == "source":
+            self.source_sidecar["SamplingFrequency"] = fsamp
+            self.source_sidecar["NumberOfSources"] = mydata.shape[0]
 
 
 #def edf_to_numpy(edf_data, idx):
