@@ -25,6 +25,7 @@ dependencies = [
     "easyDataverse",
     "pyedflib,
     "python-dateutil",
+    "bids-validator-deno",
 ]
 
 [project.optional-dependencies]

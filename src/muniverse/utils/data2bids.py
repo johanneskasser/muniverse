@@ -2,6 +2,7 @@ import json
 import os
 import re
 import warnings
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -244,6 +245,23 @@ class bids_dataset:
         }
 
         return metadata
+    
+    def is_valid(self):
+        """
+        Returns True if your BIDS dataset is valid (i.e., has no errors). 
+        
+        """
+
+        errors, _ = run_bids_validator(
+            self.root + "/", 
+            print_errors=False, 
+            print_warnings=False
+        )
+
+        if len(errors) == 0:
+            return True
+        else:
+            return False
     
     def _get_bids_version(self):
         """
@@ -712,6 +730,14 @@ class bids_neuromotion_recording(bids_emg_recording):
     Inherits from bids_emg_recording and adds support for additional simulation-specific files.
     """
 
+    BIDSIGNORE = [
+        "*_spikes.tsv",
+        "*_motorunits.tsv",
+        "*_internals.tsv",
+        "*_internals.edf",
+        "*_simulation.json"
+    ]
+
     def __init__(
         self,
         subject_label="sim01",
@@ -799,6 +825,10 @@ class bids_neuromotion_recording(bids_emg_recording):
             sample_frequency=self.emg_sidecar["SamplingFrequency"]
         )
         write_edf(filename, self.internals, signal_headers)
+
+        # write .bidsignore
+        fname = Path(self.root) / ".bidsignore"
+        fname.write_text("\n".join(self.BIDSIGNORE) + "\n")
 
     def read(self):
         """Override read method to include simulated data"""
@@ -1101,6 +1131,54 @@ class bids_decomp_derivatives(bids_emg_recording):
             self.source_sidecar["SamplingFrequency"] = fsamp
             self.source_sidecar["NumberOfSources"] = mydata.shape[0]
 
+def run_bids_validator(
+        path,
+        ignored_codes = [],
+        ignored_fields = [],
+        ignored_files = [],
+        print_errors=True, 
+        print_warnings=True):
+    """
+    API to the official BIDS validator.
+
+    Args:
+        path (str): Absolute of relative path to your BIDS dataset 
+        ignored_codes (list of str): Ignored error codes (e.g. ["SIDECAR_KEY_RECOMMENDED"])
+        ignored_fileds (list of str): Errors corresponding to that field are ignored (e.g. ["DeviceSerialNumber"])
+        ignored_files (list of str): Ignored errors in these files (e.g. ["/dataset_description.json"])
+        print_errors (bool): Descides if errors should be printed 
+        print_warnings (bool): Descides if warnings should be printed 
+
+    Returns:
+        errors (list): List of detected errors
+        warnings (list): List of detected warnings    
+    
+    """
+
+    result = subprocess.run(
+        ["bids-validator-deno", "--format", "json", path],
+        capture_output=True,
+        text=True
+    )
+
+    validation = json.loads(result.stdout)
+
+    messages = validation["issues"]["issues"]
+    messages = [f for f in messages if f["code"] not in ignored_codes]
+    #messages = [f for f in messages if f["subCode"] not in ignored_fields]
+    messages = [f for f in messages if (not "subCode" in f or f["subCode"] not in ignored_fields)]
+    messages = [f for f in messages if f["location"] not in ignored_files]
+    errors = [f for f in messages if f["severity"] == "error"]
+    warnings = [f for f in messages if f["severity"] == "warning"]
+
+    if print_errors:
+        print(f"Number of detected errors: {len(errors)}")
+        print(json.dumps(errors, indent=4))
+    if print_warnings:    
+        print(f"Number of detected warnings: {len(warnings)}")
+        print(json.dumps(warnings, indent=4))
+
+    return errors, warnings
 
 #def edf_to_numpy(edf_data, idx):
 #    """
