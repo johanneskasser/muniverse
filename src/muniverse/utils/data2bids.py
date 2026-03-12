@@ -637,7 +637,7 @@ class bids_emg_recording(bids_dataset):
             self.events.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
 
             name = self.root + "/" + "events.json"
-            if (self.overwrite or not os.path.isfile(name)) and (len(self.events_sidecar) > 0):
+            if ((self.overwrite or not os.path.isfile(name)) and len(self.events_sidecar) > 0):
                 with open(name, "w") as f:
                     json.dump(self.events_sidecar, f)
 
@@ -653,7 +653,8 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             self.channels = pd.read_table(filename, on_bad_lines="warn")
         else:
-            filename = self._find_inherited_file("channels.tsv")[0]
+            filename = self._find_inherited_file("channels.tsv")
+            filename = filename[0] if filename else str()
             if os.path.isfile(filename):
                 self.channels = pd.read_table(filename, on_bad_lines="warn")
 
@@ -662,7 +663,8 @@ class bids_emg_recording(bids_dataset):
             with open(filename, "r") as f:
                 self.emg_sidecar = json.load(f)
         else:
-            filename = self._find_inherited_file("emg.json")[0]
+            filename = self._find_inherited_file("emg.json")
+            filename = filename[0] if filename else str()
             with open(filename, "r") as f:
                 self.emg_sidecar = json.load(f)   
 
@@ -670,7 +672,8 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             self.electrodes = pd.read_table(filename, on_bad_lines="warn")
         else:
-            filename = self._find_inherited_file("electrodes.tsv")[0]
+            filename = self._find_inherited_file("electrodes.tsv")
+            filename = filename[0] if filename else str()
             if os.path.isfile(filename):
                 self.electrodes = pd.read_table(filename, on_bad_lines="warn")    
 
@@ -700,7 +703,8 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             self.events = pd.read_table(filename, on_bad_lines="warn")
         else:
-            filename = self._find_inherited_file("events.tsv")[0]
+            filename = self._find_inherited_file("events.tsv")
+            filename = filename[0] if filename else str()
             if os.path.isfile(filename):
                 self.events = pd.read_table(filename, on_bad_lines="warn") 
         filename = self.root + "/events.json"    
@@ -1204,13 +1208,13 @@ def run_bids_validator(
 
     validation = json.loads(result.stdout)
 
-    messages = validation["issues"]["issues"]
-    messages = [f for f in messages if f["code"] not in ignored_codes]
+    issues = validation["issues"]["issues"]
+    issues = [f for f in issues if f["code"] not in ignored_codes]
     #messages = [f for f in messages if f["subCode"] not in ignored_fields]
-    messages = [f for f in messages if (not "subCode" in f or f["subCode"] not in ignored_fields)]
-    messages = [f for f in messages if f["location"] not in ignored_files]
-    errors = [f for f in messages if f["severity"] == "error"]
-    warnings = [f for f in messages if f["severity"] == "warning"]
+    issues = [f for f in issues if (not "subCode" in f or f["subCode"] not in ignored_fields)]
+    issues = [f for f in issues if f["location"] not in ignored_files]
+    errors = [f for f in issues if f["severity"] == "error"]
+    warnings = [f for f in issues if f["severity"] == "warning"]
 
     if print_errors:
         print(f"Number of detected errors: {len(errors)}")
