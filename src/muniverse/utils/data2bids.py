@@ -27,6 +27,7 @@ class bids_dataset:
             "Name": datasetname,
             "BIDSVersion": self._get_bids_version(),
         }
+        self.readme = "# Some BIDS Dataset" # Just a placeholder
         self.subjects_sidecar = self._set_participant_sidecar()
         self.subjects_data = pd.DataFrame(
             columns=["participant_id", "age", "sex", "handedness", "weight", "height"]
@@ -62,6 +63,11 @@ class bids_dataset:
         if self.overwrite or not os.path.isfile(name):
             with open(name, "w") as f:
                 json.dump(self.dataset_sidecar, f)
+        # write README.md
+        name = f"{self.root}/README.md"
+        if self.overwrite or not os.path.isfile(name):
+            with open(name, "w", encoding="utf-8") as f:
+                f.write(self.readme)     
 
         return ()
 
@@ -85,6 +91,11 @@ class bids_dataset:
         if os.path.isfile(name):
             with open(name, "r") as f:
                 self.dataset_sidecar = json.load(f)
+        # read README.md
+        name = f"{self.root}/README.md"
+        if os.path.isfile(name):
+            with open(name, "r", encoding="utf-8") as f:
+                self.readme = f.read()        
 
         return ()
 
@@ -96,6 +107,10 @@ class bids_dataset:
             field_name (str): name of the metadata attribute to update
             source (dict, DataFrame, or str): data or file path
         """
+
+        if field_name == "readme":
+            raise ValueError(f"Property {field_name} is not supported by this function.")
+
         current = getattr(self, field_name, None)
         if current is None:
             raise ValueError(f"No such field '{field_name}'")
@@ -154,8 +169,6 @@ class bids_dataset:
 
         return label
         
-
-
     def list_all_files(self, suffix, extension):
         """
         Summarize all files with a given extension that are part of a BIDS folder
@@ -295,7 +308,7 @@ class bids_emg_recording(bids_dataset):
     """
 
     # Define valid metadata files that can be inherited and valid inheritance levels
-    INHERITABLE_FILES = ["emg", "channels" ,"electrodes", "space"]
+    INHERITABLE_FILES = ["emg", "channels" ,"electrodes", "space", "events"]
     INHERITABLE_LEVELS = ["dataset" , "task", "subject", "session"]
     # Define permissible raw data formats
     FILE_FORMATS = ["edf", "edf+", "bdf", "bdf+"]
@@ -371,6 +384,8 @@ class bids_emg_recording(bids_dataset):
                 "EMGCoordinateUnits": "mm"
             }
         }
+        self.events = pd.DataFrame(columns=["onset", "duration"])
+        self.events_sidecar = {}
 
         # Initialize empty inheritance dictionary
         self.inherited_metadata = {}
@@ -463,10 +478,10 @@ class bids_emg_recording(bids_dataset):
                 folder = f"{self.root}/"
             elif level == "subject":
                 fname = f"sub-{self.subject_label}_"
-                folder = f"{self.root}/sub-{self.subject_label}/"
+                folder = f"{self.root}/sub-{self.subject_label}/{self.datatype}/"
             elif level == "session":
                 fname = f"sub-{self.subject_label}_ses-{self.session_label}_"
-                folder = f"{self.root}/sub-{self.subject_label}/ses-{self.session_label}/"
+                folder = f"{self.root}/sub-{self.subject_label}/ses-{self.session_label}/{self.datatype}"
            
         if datatype is None:
             pass
@@ -491,7 +506,7 @@ class bids_emg_recording(bids_dataset):
             "Trying to automatically search for inherited files."
         )
 
-        searchpath = Path(self.datapath).parent.resolve()
+        searchpath = Path(self.datapath).resolve()
         stop_folder = Path(self.root).resolve()
 
         files = list()
@@ -587,14 +602,16 @@ class bids_emg_recording(bids_dataset):
 
         # Write files
         filename = self._get_bids_filename("channels", "tsv")
-        self.channels.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
+        if len(self.channels) > 0:
+            self.channels.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
 
         filename = self._get_bids_filename("emg","json")
         with open(filename, "w") as f:
             json.dump(self.emg_sidecar, f)
 
         filename = self._get_bids_filename("electrodes","tsv")
-        self.electrodes.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
+        if len(self.electrodes) > 0:
+            self.electrodes.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
 
         filename = self._get_bids_filename("space", None)
         for name, metadata in self.coord_sidecar.items():
@@ -613,6 +630,17 @@ class bids_emg_recording(bids_dataset):
             sample_frequency=self.emg_sidecar["SamplingFrequency"]
         )
         write_edf(filename, self.emg_data, signal_headers)
+
+        # Write events.tsv and sidecar
+        if len(self.events) > 0:
+            filename = self._get_bids_filename("events", "tsv")
+            self.events.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
+
+            name = self.root + "/" + "events.json"
+            if (self.overwrite or not os.path.isfile(name)) and (len(self.events_sidecar) > 0):
+                with open(name, "w") as f:
+                    json.dump(self.events_sidecar, f)
+
 
     def read(self):
         """
@@ -666,6 +694,19 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             #self.emg_data = read_edf(filename)
             self.emg_data, _, _ = read_edf(filename)
+
+        # Read events .tsv
+        filename = self._get_bids_filename("events","tsv")
+        if os.path.isfile(filename):
+            self.events = pd.read_table(filename, on_bad_lines="warn")
+        else:
+            filename = self._find_inherited_file("events.tsv")[0]
+            if os.path.isfile(filename):
+                self.events = pd.read_table(filename, on_bad_lines="warn") 
+        filename = self.root + "/events.json"    
+        if os.path.isfile(filename):
+            with open(filename, "r") as f:
+                self.events_sidecar = json.load(f)            
 
     def set_metadata(self, field_name, source):
 
