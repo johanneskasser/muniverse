@@ -4,14 +4,17 @@ from scipy.io import loadmat
 import h5py
 import os
 import json
-from edfio import *
+#from edfio import *
 from muniverse.utils.data2bids import *
 from muniverse.utils.otb_io import open_otb, format_otb_channel_metadata
-#from .sidecar_templates import emg_sidecar_template, dataset_sidecar_template
 from pathlib import Path
 
 # Helper function for getting electrode coordinates
 def get_grid_coordinates(grid_name):
+    """
+    Helper funcion to extract electrode coordinates given a grid type.
+    
+    """
 
     if grid_name == 'GR04MM1305':
         x = np.zeros(64)
@@ -26,117 +29,205 @@ def get_grid_coordinates(grid_name):
         x[38:51] = np.linspace(0,12*4,13)
         y[51:64] = 16
         x[51:64] = np.linspace(12*4,0,13)
+
+    elif grid_name == "GR08MM1305":
+        x = np.zeros(64)
+        y = np.zeros(64)
+        y[0:12]  = 0
+        x[0:12]  = np.linspace(11*8,0,12)
+        y[12:25] = 8
+        x[12:25] = np.linspace(0,12*8,13)
+        y[25:38] = 16
+        x[25:38] = np.linspace(12*8,0,13)
+        y[38:51] = 24
+        x[38:51] = np.linspace(0,12*8,13)
+        y[51:64] = 32
+        x[51:64] = np.linspace(12*8,0,13)
            
     else:
         raise ValueError('The given grid_name has no reference')
 
     return(x,y)
 
-# Helper function for making channel metadata
-def make_channel_metadata(fsamp = 2048, muscle = 'Tibialis Anterior', IED = 4, grid_name = 'GR04MM1305'):
-    columns = ['name', 'type', 'unit', 'description', 'sampling_frequency', 
-                'signal_electrode', 'reference_electrode', 'group', 'target_muscle',
-                'interelectrode_distance', 'grid_name', 'low_cutoff', 'high_cutoff', 'status']
+def make_channel_metadata(
+        fsamp = 2048, 
+        muscle = 'right tibialis anterior', 
+        IED = 4, 
+        ngrid = 4
+    ):
+    """
+    Helper function to manually curate chanel metadata.
     
-    ngrid = 4
+    """
 
+    # Define the columns of the *_channels.tsv file
+    columns = ['name', 'type', 'units', 'description', 'sampling_frequency', 
+                'signal_electrode', 'reference', 'group', 'target_muscle',
+                'interelectrode_distance', 'low_cutoff', 'high_cutoff', 'status']
+    
+    # Init dataframe containing the channels metadata
     df = pd.DataFrame(np.nan, index=range(64*ngrid + 2), columns=columns)
-    df = df.astype({"name": "string", "type": "string", "unit": "string",
-                    "description": "string", "sampling_frequency": "float",
-                    "signal_electrode": "string", "reference_electrode": "string",
-                    "group": "string", "target_muscle": "string", "interelectrode_distance": "float",
-                    "grid_name": "string", "low_cutoff": "float", "high_cutoff": "float", "status": "string"})
-
+    df = df.astype({
+        "name": "string", 
+        "type": "string", 
+        "units": "string",
+        "description": "string", 
+        "sampling_frequency": "float",
+        "signal_electrode": "string", 
+        "reference": "string",
+        "group": "string", 
+        "target_muscle": "string", 
+        "interelectrode_distance": "float",
+        "low_cutoff": "float", 
+        "high_cutoff": "float", 
+        "status": "string"
+    })
+    # Set channel names
     df.loc[:df.shape[0], 'name'] = ['Ch' + str(i+1).zfill(2) for i in range(64*ngrid + 2)]
+    # All the EMG channels
     df.loc[:ngrid*64-1, 'type'] = 'EMG'
-    df.loc[:ngrid*64-1, 'unit'] = 'mV'
-    df.loc[:ngrid*64-1, 'description'] = 'ElectroMyoGraphy'
+    df.loc[:ngrid*64-1, 'units'] = 'mV'
+    df.loc[:ngrid*64-1, 'description'] = 'monopolar EMG'
     df.loc[:df.shape[0], 'sampling_frequency'] = fsamp
-    df.loc[:ngrid*64-1, 'signal_electrode'] = ['E' + str(i+1).zfill(2) for i in range(64*ngrid)]
-    df.loc[:ngrid*64-1, 'reference_electrode'] = 'R1'
+    df.loc[:ngrid*64-1, 'signal_electrode'] = ['E' + str(i+1).zfill(3) for i in range(64*ngrid)]
+    df.loc[:ngrid*64-1, 'reference'] = 'R1'
     df.loc[0:64*1-1, 'group'] = 'Grid1'
     df.loc[64:64*2-1, 'group'] = 'Grid2'
     df.loc[64*2:64*3-1, 'group'] = 'Grid3'
     df.loc[64*3:64*4-1, 'group'] = 'Grid4'
     df.loc[:ngrid*64-1, 'target_muscle'] = muscle
     df.loc[:ngrid*64-1, 'interelectrode_distance'] = IED
-    df.loc[:ngrid*64-1, 'grid_name'] = grid_name
     df.loc[:ngrid*64-1, 'low_cutoff'] = 500
     df.loc[:ngrid*64-1, 'high_cutoff'] = 20
     df.loc[:df.shape[0], 'status'] = 'n/a'
-    #df.loc[ngrid*64+2, 'description'] = 'Auxilary force input'
+    # Set the task channels
     df.loc[ngrid*64+0, 'description'] = 'Requested Path'
     df.loc[ngrid*64+1, 'description'] = 'Performed Path'
-    #df.loc[ngrid*64+2, 'unit'] = 'V'
-    df.loc[ngrid*64+0, 'unit'] = 'percent MVC'
-    df.loc[ngrid*64+1, 'unit'] = 'percent MVC'
-    #df.loc[ngrid*64+2, 'type'] = 'MISC'
+    df.loc[ngrid*64+0, 'units'] = 'percent MVC'
+    df.loc[ngrid*64+1, 'units'] = 'percent MVC'
     df.loc[ngrid*64+0, 'type'] = 'MISC'
     df.loc[ngrid*64+1, 'type'] = 'MISC'
     
     return df
 
-# TODO Add to electrode.tsv file
-#"ElectrodeManufacturer": "OTBioelettronica",
-#"ElectrodeManufaturerModelName": "GR04MM1305",
-#"ElectrodeMaterial": "gold coated",
-#"InterelectrodeDistance": 4,
+def make_electrode_metadata(
+        ngrids, 
+        gridname='GR04MM1305'
+    ):
+    """
+    Helper function to curate the electrode metadata
+    
+    """
 
-# Helper  function for making the electrode metadata
-def make_electrode_metadata(ngrids, gridname='GR04MM1305', ied=4):
-    name              = []
-    x                 = []
-    y                 = []
-    coordinate_system = []
-    gridname = []
-    ied_vals = []
-    el_manufacturer = []
-    el_material = []
+    # Define the columns of the electrode.tsv file
+    columns = ["name", "x", "y", "coordinate_system"]
 
+    # Init dataframe containing the electrode metadata
+    df = pd.DataFrame(np.nan, index=range(64*ngrids + 2), columns=columns)
+    df = df.astype({
+        "name": "string", 
+        "x": "float", 
+        "y": "float",
+        "coordinate_system": "string", 
+    })
+
+
+    # Loop over each electrode (of the four grids) and set metadata
     elecorode_idx = 0
     for i in np.arange(ngrids):
-        (xg, yg) = get_grid_coordinates('GR04MM1305')
+        (xg, yg) = get_grid_coordinates(gridname)
         for j in np.arange(64):
-            elecorode_idx += 1
-            name.append('E' + str(elecorode_idx))
-            coordinate_system.append('Grid1')
-            gridname.append(gridname)
-            ied_vals.append(ied)
-            el_manufacturer.append("OTBioelettronica")
-            el_material.append("gold coated")
-            if i==0:
-                x.append(xg[j])
-                y.append(yg[j])
-            elif i==1:
-                x.append(xg[j])
-                y.append(yg[j] + 20) 
-            elif i==2:
-                x.append(100 - xg[j])
-                y.append(16 - yg[j]) 
-            elif i==3:
-                x.append(100 - xg[j])
-                y.append(36 - yg[j])     
-    name.append('R1')
-    name.append('R2')
-    x.append('n/a') 
-    x.append('n/a') 
-    y.append('n/a') 
-    y.append('n/a') 
-    coordinate_system.append('n/a') 
-    coordinate_system.append('n/a')    
-    # TODO add metadata for these electrodes    
-    el_metadata = {'name': name, 'x': x, 'y': y, 'coordinate_system': coordinate_system}
+            df.loc[elecorode_idx, "name"] = f"E{str(elecorode_idx+1).zfill(3)}" # f'E' + str(elecorode_idx))
+            # Map all electrode coordinates into the grid1 coordinate system
+            df.loc[elecorode_idx, "coordinate_system"] = "grid1"
+            if i==0: # Lateral-Proximal
+                df.loc[elecorode_idx, "x"] = xg[j]
+                df.loc[elecorode_idx, "y"] = yg[j]
+            elif i==3: # Medial-Proximal
+                y_shift = 20 if gridname == "GR04MM1305" else 40
+                df.loc[elecorode_idx, "x"] = xg[j]
+                df.loc[elecorode_idx, "y"] = yg[j] + y_shift
+            elif i==1: # Lateral-Distal
+                x_shift = 100 if gridname == "GR04MM1305" else 200
+                y_shift = 16 if gridname == "GR04MM1305" else 32
+                df.loc[elecorode_idx, "x"] = x_shift - xg[j]
+                df.loc[elecorode_idx, "y"] = y_shift - yg[j]
+            elif i==2: # Medial-Distal
+                x_shift = 100 if gridname == "GR04MM1305" else 200
+                y_shift = 36 if gridname == "GR04MM1305" else 72
+                df.loc[elecorode_idx, "x"] = x_shift - xg[j]
+                df.loc[elecorode_idx, "y"] = y_shift - yg[j]
+            # Take care of the electrode index    
+            elecorode_idx += 1    
+   
+   # Add the reference electrodes
+    df.loc[ngrids*64+0, "name"] = "R1"
+    df.loc[ngrids*64+1, "name"] = "R2"
 
-    return(el_metadata)
+    df.loc[ngrids*64+0, "coordinate_system"] = "lowerLeg"
+    df.loc[ngrids*64+1, "coordinate_system"] = "lowerLeg"
 
+    df.loc[ngrids*64+0, "x"] = 90
+    df.loc[ngrids*64+1, "x"] = 95
+
+    df.loc[ngrids*64+0, "y"] = 0
+    df.loc[ngrids*64+1, "y"] = 0
+
+    return df
+
+def get_events_tsv(requested_path, fsamp, mvc_level, mvc_rate):
+    """
+    Helper function to convert the requested path
+    into a events.tsv file
+    
+    """
+
+    columns = ["onset", "duration", "sample", "mvc_rate", "mvc_level", "description"]
+
+    delta = 0.5
+    path_0 = requested_path[0]
+    path_max = np.max(requested_path)
+
+    if mvc_level >= 70:
+        plateau = 10
+    elif mvc_level >= 50:
+        plateau = 15
+    else:
+        plateau = 20
+
+    idx_1 = np.argwhere(requested_path>path_0+delta).squeeze()[0]
+    idx_2 = np.argwhere(requested_path>path_max-delta).squeeze()[0]
+    idx_3 = np.argwhere(requested_path>path_max-delta).squeeze()[-1]
+
+    df = pd.DataFrame(columns=columns)
+    df.loc[len(df)] = [
+        np.round(idx_1/fsamp,6), mvc_level/mvc_rate, 
+        idx_1, mvc_rate, 0, 
+        "linear ramp of isometric torque"
+    ]
+    df.loc[len(df)] = [
+        np.round(idx_2/fsamp,6), plateau, 
+        idx_2, 0, mvc_level, 
+        "steady isometric torque"
+    ]
+    df.loc[len(df)] = [
+        np.round(idx_3/fsamp,6), mvc_level/mvc_rate, 
+        idx_3, -mvc_rate, mvc_level, 
+        "linear ramp of isometric torque"
+    ]
+
+    return df    
+
+# Load the manually curated metadata
 metadatapath = str(Path(__file__).parent.parent) + '/bids_metadata/' 
-
 with open(metadatapath + 'avrillon_et_al_2024.json', 'r') as f:
     manual_metadata = json.load(f)
 
-
+# Load the original data (to be bidsified)
 sourcepath = str(Path.home()) + '/Downloads/avrillon2024/'
 
+# Sampling rate
+fsamp = 2048
 
 # Subjects 
 sub_id = [1, 2, 3, 4, 5, 6, 7, 8, 
@@ -145,11 +236,9 @@ sub_id = [1, 2, 3, 4, 5, 6, 7, 8,
 sub_id = [1]
 
 # Number of subjects
-n_sub = 1 #len(sub_id)
+n_sub = len(sub_id)
 
-#matfile = loadmat(sourcepath + 'S1_10_DF.otb+_decomp.mat_edited.mat', struct_as_record=False, squeeze_me=True)
-
-
+# Set population level metadata
 subjects_data = {
     'participant_id': [
         'sub-01', 'sub-02', 'sub-03', 'sub-04', 'sub-05', 'sub-06', 'sub-07', 'sub-08',
@@ -160,29 +249,86 @@ subjects_data = {
         'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a'
     ]
 }
+# Extract the dataset-level metadata 
 dataset_sidecar = manual_metadata["DatasetDescription"] #dataset_sidecar_template(ID='Caillet2023')
+# Content of the README.md file
+readme = """
+# Avrillon et al 2024: HDsEMG recordings
 
-Avrillon_2024 = bids_dataset(datasetname='Avrillon_et_al_2024', root=str(Path.home()) + '/Downloads/')
+BIDS-formatted version of the HDsEMG dataset published in *Avrillon et al. 2024*. 
+Sixteen subjects performed a series of submaximal (10-80 percent MVC) isometric ankle 
+dorsiflexions or isometric knee extensions. EMG signals were recorded from either 
+the right  tibialis anterior or the right vasutus lateralis muscle using four arrays 
+of 64 surface electrodes for a total of 256 electrodes.
+
+# Coordinate systems
+All electrode coordinates (reported in mm) have been converted to a common reference 
+frame corresponding to the first EMG-array (*space-grid1*). 
+The positions of the reference and ground electrodes are reported in a seperate 
+coordinate system (*space-lowerLeg*) reported in percent of the lower leg length. 
+
+# Conversion
+The dataset has been converted semi-automatically using the *MUniverse* software.
+See *dataset_description.json* for further details.
+
+"""
+
+events_sidecar = {
+    "onset": {
+        "Description": "Onset time of the event in seconds from recording start.", 
+        "Unit": "s"
+    }, 
+    "duration": {
+        "Description": "Duration of the event in seconds. A value of zero means that the event is a dirac pulse", 
+        "Unit": "s"
+    }, 
+    "sample": {
+        "Description": "Sample index of the event onset (zero-indexing)", 
+        "Unit": "samples"
+    },
+    "mvc_rate": {
+        "Description": "Rate at which the torque changes in percent MVC per second",
+        "Unit": "% MVC / s"
+    }, 
+    "mvc_level": {
+        "Description": "MVC (maximum voluntary contraction) level at the onset of the event",
+        "Unit": "% MVC"
+    },
+    "description": {
+        "Description": "Free text event description."
+    }
+}
+
+Avrillon_2024 = bids_dataset(
+    datasetname='Avrillon_et_al_2024', 
+    root=str(Path.home()) + '/Downloads/',
+    overwrite=True
+)
+Avrillon_2024.readme = readme
 Avrillon_2024.set_metadata(field_name='subjects_data', source=subjects_data)
 Avrillon_2024.set_metadata(field_name='dataset_sidecar', source=dataset_sidecar)
 Avrillon_2024.write()
 
+# Loop over all subjects
 for i in np.arange(len(sub_id)):
 
+
     filelist = [f for f in os.listdir(sourcepath) if f.startswith('S' + str(sub_id[i]) + '_')]
-    print('sub-' + str(sub_id[i]))
+    print(f"sub-{str(sub_id[i]).zfill(2)}")
     for j in np.arange(len(filelist)):
 
+        ngrids = 4
         if sub_id[i] < 10:
-            muscle = 'Tibialis Anterior'
+            muscle = 'right tibialis anterior'
             grid   = 'GR04MM1305'
             ied    = 4
         else:
-            muscle = 'Vastus Lateralis'
+            muscle = 'right vastus lateralis'
             grid   = 'GR08MM1305'
             ied    = 8
 
-        task = 'isometric' + filelist[j].split('_')[1] + 'percentmvc'
+        mvc_level = int(filelist[j].split('_')[1])
+        task_label = f"isometric{mvc_level}percentmvc"
 
         filename = sourcepath + filelist[j]
         try: 
@@ -198,22 +344,16 @@ for i in np.arange(len(sub_id)):
                 target = np.array(signal['target']).T
                 path = np.array(signal['path']).T
 
-
-        ngrids = 4
-
         emg_data = np.zeros((64*ngrids+2,data.shape[1]))
-        #emg_data = data
-        #emg_data = emg_data[:64*ngrids+2,:]
         emg_data[:64*ngrids,:] = data[:64*ngrids,:] / 150 # Divide by the gain to obtain EMG amplitudes in mV
         emg_data[64*ngrids,:] = target
         emg_data[64*ngrids+1,:] = path
-        emg_data = emg_data.T
         
         # Get and write channel metadata
-        ch_metadata = make_channel_metadata(muscle=muscle, grid_name=grid, IED=ied)
+        ch_metadata = make_channel_metadata(fsamp=fsamp, muscle=muscle, IED=ied, ngrid=ngrids)
 
         # Get electrode metadata
-        el_metadata = make_electrode_metadata(ngrids=4)
+        el_metadata = make_electrode_metadata(ngrids=4, gridname=grid)
 
         # Make the coordinate system sidecar file (here just a placeholder)
         coordsystem_metadata = manual_metadata["CoordSystemSidecar"] # {'EMGCoordinateSystem': 'local', 'EMGCoordinateUnits': 'mm'}
@@ -228,22 +368,44 @@ for i in np.arange(len(sub_id)):
         # Make a recording and add data and metadata
         emg_recording = bids_emg_recording(
             dataset_config=Avrillon_2024,
-            subject_id=sub_id[i], 
-            task_label=task, 
+            subject_label=str(sub_id[i]).zfill(2), 
+            task_label=task_label, 
             datatype='emg',
-            inherited_metadata=["emg", "channels", "electrodes", "coordsystem"],
-            inherited_level=["dataset", "dataset", "dataset", "dataset"]
+            inherited_metadata=["electrodes", "space"],
+            inherited_level=["subject", "subject"],
+            overwrite=False
         )
         
         emg_recording.set_metadata(field_name='channels', source=ch_metadata)
         emg_recording.set_metadata(field_name='electrodes', source=el_metadata) 
         emg_recording.set_metadata(field_name='emg_sidecar', source=emg_sidecar)
-        emg_recording.set_metadata(field_name='coord_sidecar', source=coordsystem_metadata)
-        emg_recording.set_data(field_name='emg_data', mydata=emg_data,fsamp=2048)
+        emg_recording.set_metadata(field_name='coord_sidecar', source=coordsystem_metadata, overwrite=True)
+        emg_recording.set_data(field_name='emg_data', mydata=emg_data,fsamp=fsamp)
+        emg_recording.emg_sidecar["TaskName"] = task_label
+        emg_recording.emg_sidecar["RecordingDuration"] = emg_data.shape[1]/fsamp
+
+        #events = pd.DataFrame(columns=["onset", "duration"]) #, "sample", "description"])
+        #events.loc[len(events)] = [10, 10]
+
+        events= get_events_tsv(target, fsamp, mvc_level, mvc_rate=5)
+
+        emg_recording.set_metadata(field_name="events", source=events)
+        emg_recording.set_metadata(field_name="events_sidecar", source=events_sidecar)
 
         emg_recording.write()
 
-print('done')
+# Validate the BIDS dataset
+err, warn = run_bids_validator(
+    f"{Avrillon_2024.root}/",
+    print_errors=True,
+    print_warnings=True,
+    ignored_codes=[],
+    ignored_fields=["HEDVersion", "StimulusPresentation", "DeviceSerialNumber"],
+    ignored_files=[]
+)
+
+print("The BIDS conversion has completed")
+print(f"Your BIDS dataset contains {len(err)} errors and {len(warn)} warnings")
 
 
 
