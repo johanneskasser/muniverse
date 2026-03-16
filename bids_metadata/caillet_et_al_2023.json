@@ -1,7 +1,7 @@
 {
     "DatasetDescription":{
         "Name": "MUniverse Caillet et al 2023", 
-        "BIDSVersion": "1.11.0", 
+        "BIDSVersion": "1.11.1", 
         "DatasetType": "raw", 
         "License": "CC0 BY 4.0", 
         "Authors": [
@@ -81,10 +81,17 @@
     },
 
     "CoordSystemSidecar":{
-        "EMGCoordinateSystem": "Other", 
-        "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; all local electrode coordinates (per grid) are mapped on a single global coordinate system.",
-        "EMGCoordinateUnits": "mm",
-        "AnchorElectrode": "E12 - Grid1"
+        "grid1": {
+            "EMGCoordinateSystem": "Other", 
+            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: lateral -> medial; all local electrode coordinates (per grid) are mapped on a single global coordinate system.",
+            "EMGCoordinateUnits": "mm",
+            "AnchorElectrode": "E12 - Grid1"
+        },
+        "lowerLeg": {
+            "EMGCoordinateSystem": "Other",
+            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: lateral -> medial; the coordinate system is located at the knee joint", 
+            "EMGCoordinateUnits": "percent"
+        }
     }
 
 }

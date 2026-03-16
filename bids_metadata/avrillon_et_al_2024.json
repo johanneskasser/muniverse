@@ -1,7 +1,7 @@
 {   
     "DatasetDescription": {
         "Name": "MUniverse Avrillon et al 2024",
-        "BIDSVersion": "1.11.0",
+        "BIDSVersion": "1.11.1",
         "DatasetType": "raw",
         "License": "CC0 BY 4.0",
         "Authors": [

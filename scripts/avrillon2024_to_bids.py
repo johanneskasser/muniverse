@@ -1,15 +1,14 @@
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
-import h5py
-import os
-import json
-#from edfio import *
+import h5py, os, json
 from muniverse.utils.data2bids import *
-from muniverse.utils.otb_io import open_otb, format_otb_channel_metadata
 from pathlib import Path
 
-# Helper function for getting electrode coordinates
+# ------------------------------------------ #
+# ---------  Helper functions -------------- #
+# ------------------------------------------ #
+  
 def get_grid_coordinates(grid_name):
     """
     Helper funcion to extract electrode coordinates given a grid type.
@@ -182,59 +181,100 @@ def get_events_tsv(requested_path, fsamp, mvc_level, mvc_rate):
     
     """
 
-    columns = ["onset", "duration", "sample", "mvc_rate", "mvc_level", "description"]
+    columns = ["onset", "duration", "sample", "mvc_rate", "mvc_level", "event_type", "description"]
+    df = pd.DataFrame(columns=columns)
+    df = df.astype({
+        "onset": "float", 
+        "duration": "float", 
+        "sample": "int",
+        "mvc_rate": "float", 
+        "mvc_level": "float",
+        "event_type": "string", 
+        "description": "string"
+    })
 
     delta = 0.5
     path_0 = requested_path[0]
     path_max = np.max(requested_path)
 
+    l_ramp = mvc_level / mvc_rate
+
     if mvc_level >= 70:
-        plateau = 10
+        l_plateau = 10
     elif mvc_level >= 50:
-        plateau = 15
+        l_plateau = 15
     else:
-        plateau = 20
+        l_plateau = 20
 
     idx_1 = np.argwhere(requested_path>path_0+delta).squeeze()[0]
     idx_2 = np.argwhere(requested_path>path_max-delta).squeeze()[0]
     idx_3 = np.argwhere(requested_path>path_max-delta).squeeze()[-1]
+    idx_4 = np.argwhere(requested_path>path_0+delta).squeeze()[-1]
 
-    df = pd.DataFrame(columns=columns)
+    mask1 = np.arange(idx_1,idx_2)
+    m1, b1 = np.polyfit(mask1, requested_path[mask1], 1)
+    mask2 = np.arange(idx_3,idx_4)
+    m2, b2 = np.polyfit(mask2, requested_path[mask2], 1)
+
+    idx_1 = int((0 - b1) / m1)
+    idx_2 = int((mvc_level - b1) / m1)
+    idx_3 = int((mvc_level - b2) / m2)
+    idx_4 = int((0 - b2) / m2)
+    #t_4 = (path_0 - b2) / m2
+
     df.loc[len(df)] = [
-        np.round(idx_1/fsamp,6), mvc_level/mvc_rate, 
+        np.round(idx_1/fsamp,6), 0, 
+        idx_1, np.nan, np.nan, 
+        "muscle_on",
+        "Time at which the muscle is activated."
+    ]
+    df.loc[len(df)] = [
+        np.round(idx_1/fsamp,6), l_ramp, 
         idx_1, mvc_rate, 0, 
-        "linear ramp of isometric torque"
+        "linear_isometric_ramp",
+        f"Linear ramp (rate: {mvc_rate} % MVC per s; duration: {l_ramp} s) of the isometric torque starting at 0 % MVC."
     ]
     df.loc[len(df)] = [
-        np.round(idx_2/fsamp,6), plateau, 
+        np.round(idx_2/fsamp,6), l_plateau, 
         idx_2, 0, mvc_level, 
-        "steady isometric torque"
+        "steady_isometric",
+        f"Steady isometric torque at {mvc_level}% MVC for {l_plateau} s"
     ]
     df.loc[len(df)] = [
-        np.round(idx_3/fsamp,6), mvc_level/mvc_rate, 
+        np.round(idx_3/fsamp,6), l_ramp, 
         idx_3, -mvc_rate, mvc_level, 
-        "linear ramp of isometric torque"
+        "linear_isometric_ramp",
+        f"Linear ramp (rate: {-mvc_rate} % MVC per s; duration: {l_ramp} s) of the isometric torque starting at {mvc_level} % MVC."
+    ]
+    df.loc[len(df)] = [
+        np.round(idx_4/fsamp,6), 0, 
+        idx_4, np.nan, np.nan, 
+        "muscle_off",
+        "Time at which the muscle is deactivated."
     ]
 
     return df    
 
-# Load the manually curated metadata
+# ------------------------------------------ #
+# --------  Dataset-level metadata --------- #
+# ------------------------------------------ #
+
+# Import the manually curated metadata
 metadatapath = str(Path(__file__).parent.parent) + '/bids_metadata/' 
 with open(metadatapath + 'avrillon_et_al_2024.json', 'r') as f:
     manual_metadata = json.load(f)
 
-# Load the original data (to be bidsified)
+# Path to the original data (to be bidsified)
 sourcepath = str(Path.home()) + '/Downloads/avrillon2024/'
 
 # Sampling rate
 fsamp = 2048
+ngrids = 4
 
-# Subjects 
+# List of subjects 
 sub_id = [1, 2, 3, 4, 5, 6, 7, 8, 
           11, 12, 13, 14, 15, 16, 17, 18]
-
 sub_id = [1]
-
 # Number of subjects
 n_sub = len(sub_id)
 
@@ -249,13 +289,12 @@ subjects_data = {
         'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a', 'n/a'
     ]
 }
-# Extract the dataset-level metadata 
-dataset_sidecar = manual_metadata["DatasetDescription"] #dataset_sidecar_template(ID='Caillet2023')
-# Content of the README.md file
+ 
+# Prepare the dataset-level README.md file
 readme = """
 # Avrillon et al 2024: HDsEMG recordings
 
-BIDS-formatted version of the HDsEMG dataset published in *Avrillon et al. 2024*. 
+BIDS-formatted version of the HDsEMG dataset published in *[Avrillon et al. 2024](https://doi.org/10.7554/eLife.97085.3)*. 
 Sixteen subjects performed a series of submaximal (10-80 percent MVC) isometric ankle 
 dorsiflexions or isometric knee extensions. EMG signals were recorded from either 
 the right  tibialis anterior or the right vasutus lateralis muscle using four arrays 
@@ -273,6 +312,7 @@ See *dataset_description.json* for further details.
 
 """
 
+# Prepare a events sidecar file
 events_sidecar = {
     "onset": {
         "Description": "Onset time of the event in seconds from recording start.", 
@@ -294,11 +334,24 @@ events_sidecar = {
         "Description": "MVC (maximum voluntary contraction) level at the onset of the event",
         "Unit": "% MVC"
     },
+    "event_type": {
+        "Description": "Event label.",
+        "Levels": {
+            "muscle_on": "The muscle is activated.",
+            "muscle_off": "The muscle is deactivated.",
+            "linear_isometric_ramp": "The isometric torque changes linearly over time with a fixed rate.",
+            "steady_isometric": "Steady isometric contraction at a fixed MVC level."
+        }
+    },
     "description": {
         "Description": "Free text event description."
     }
 }
 
+# Dictonary of dataset-level metadata 
+dataset_sidecar = manual_metadata["DatasetDescription"]
+
+# Handle the dataset level metadata
 Avrillon_2024 = bids_dataset(
     datasetname='Avrillon_et_al_2024', 
     root=str(Path.home()) + '/Downloads/',
@@ -309,15 +362,25 @@ Avrillon_2024.set_metadata(field_name='subjects_data', source=subjects_data)
 Avrillon_2024.set_metadata(field_name='dataset_sidecar', source=dataset_sidecar)
 Avrillon_2024.write()
 
-# Loop over all subjects
+# ------------------------------------------ #
+# -------  Loop over all recordings -------- #
+# ------------------------------------------ #
 for i in np.arange(len(sub_id)):
 
+    print(f"Bidsifying data of sub-{str(sub_id[i]).zfill(2)}")
 
+    # List of files per subject
     filelist = [f for f in os.listdir(sourcepath) if f.startswith('S' + str(sub_id[i]) + '_')]
-    print(f"sub-{str(sub_id[i]).zfill(2)}")
+
+    # Loop over all recordings 
     for j in np.arange(len(filelist)):
 
-        ngrids = 4
+        # Extract the task
+        mvc_level = int(filelist[j].split('_')[1])
+        task_label = f"isometric{mvc_level}percentmvc"
+        print(f"    - Recording {j}: task-{task_label}")
+
+        # Investigated muscle and selected electrode
         if sub_id[i] < 10:
             muscle = 'right tibialis anterior'
             grid   = 'GR04MM1305'
@@ -326,10 +389,8 @@ for i in np.arange(len(sub_id)):
             muscle = 'right vastus lateralis'
             grid   = 'GR08MM1305'
             ied    = 8
-
-        mvc_level = int(filelist[j].split('_')[1])
-        task_label = f"isometric{mvc_level}percentmvc"
-
+      
+        # Load data
         filename = sourcepath + filelist[j]
         try: 
             matfile = loadmat(filename, struct_as_record=False, squeeze_me=True)
@@ -339,7 +400,6 @@ for i in np.arange(len(sub_id)):
         except NotImplementedError:
             with h5py.File(filename, "r") as f:
                 signal = f['signal']
-                #data_ref = signal['data']
                 data = np.array(signal['data']).T
                 target = np.array(signal['target']).T
                 path = np.array(signal['path']).T
@@ -349,21 +409,18 @@ for i in np.arange(len(sub_id)):
         emg_data[64*ngrids,:] = target
         emg_data[64*ngrids+1,:] = path
         
-        # Get and write channel metadata
+        # channel metadata
         ch_metadata = make_channel_metadata(fsamp=fsamp, muscle=muscle, IED=ied, ngrid=ngrids)
-
-        # Get electrode metadata
+        # electrode metadata
         el_metadata = make_electrode_metadata(ngrids=4, gridname=grid)
-
-        # Make the coordinate system sidecar file (here just a placeholder)
-        coordsystem_metadata = manual_metadata["CoordSystemSidecar"] # {'EMGCoordinateSystem': 'local', 'EMGCoordinateUnits': 'mm'}
-
-        # Make the emg sidecar file
-        emg_sidecar = manual_metadata["EMGSidecar"] #emg_sidecar_template('Caillet2023')
-        #emg_sidecar['SamplingFrequency'] =  int(metadata['device_info']['SampleFrequency'])
-        #emg_sidecar['SoftwareVersions'] = metadata['subject_info']['software_version']
-        #emg_sidecar['ManufacturerModelName'] = metadata['device_info']['Name']
-
+        # space metadata
+        coordsystem_metadata = manual_metadata["CoordSystemSidecar"] 
+        # emg sidecar metadata
+        emg_sidecar = manual_metadata["EMGSidecar"] 
+        emg_sidecar["TaskName"] = task_label
+        emg_sidecar["RecordingDuration"] = emg_data.shape[1]/fsamp
+        # events metadata
+        events = get_events_tsv(target, fsamp, mvc_level, mvc_rate=5)
 
         # Make a recording and add data and metadata
         emg_recording = bids_emg_recording(
@@ -381,29 +438,23 @@ for i in np.arange(len(sub_id)):
         emg_recording.set_metadata(field_name='emg_sidecar', source=emg_sidecar)
         emg_recording.set_metadata(field_name='coord_sidecar', source=coordsystem_metadata, overwrite=True)
         emg_recording.set_data(field_name='emg_data', mydata=emg_data,fsamp=fsamp)
-        emg_recording.emg_sidecar["TaskName"] = task_label
-        emg_recording.emg_sidecar["RecordingDuration"] = emg_data.shape[1]/fsamp
-
-        #events = pd.DataFrame(columns=["onset", "duration"]) #, "sample", "description"])
-        #events.loc[len(events)] = [10, 10]
-
-        events= get_events_tsv(target, fsamp, mvc_level, mvc_rate=5)
-
-        emg_recording.set_metadata(field_name="events", source=events)
         emg_recording.set_metadata(field_name="events_sidecar", source=events_sidecar)
-
+        emg_recording.set_metadata(field_name="events", source=events)
         emg_recording.write()
 
-# Validate the BIDS dataset
-err, warn = run_bids_validator(
-    f"{Avrillon_2024.root}/",
+# ------------------------------------------ #
+# ---------  Validate outputs -------------- #
+# ------------------------------------------ #
+
+err, warn = Avrillon_2024.validate(
     print_errors=True,
     print_warnings=True,
-    ignored_codes=[],
+    ignored_codes=["TSV_COLUMN_TYPE_REDEFINED"],
     ignored_fields=["HEDVersion", "StimulusPresentation", "DeviceSerialNumber"],
     ignored_files=[]
 )
 
+# 
 print("The BIDS conversion has completed")
 print(f"Your BIDS dataset contains {len(err)} errors and {len(warn)} warnings")
 
