@@ -446,7 +446,7 @@ for i in np.arange(len(sub_id)):
 # ---------  Validate outputs -------------- #
 # ------------------------------------------ #
 
-err, warn = Avrillon_2024.validate(
+err, warn, _ = Avrillon_2024.validate(
     print_errors=True,
     print_warnings=True,
     ignored_codes=["TSV_COLUMN_TYPE_REDEFINED"],

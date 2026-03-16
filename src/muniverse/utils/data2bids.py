@@ -27,7 +27,11 @@ class bids_dataset:
             "Name": datasetname,
             "BIDSVersion": self._get_bids_version(),
         }
-        self.readme = "# Some BIDS Dataset" # Just a placeholder
+        self.readme = """# Some BIDS Dataset
+
+        Your dataset description goes here
+
+        """ 
         self.subjects_sidecar = self._set_participant_sidecar()
         self.subjects_data = pd.DataFrame(
             columns=["participant_id", "age", "sex", "handedness", "weight", "height"]
@@ -265,23 +269,43 @@ class bids_dataset:
         }
 
         return metadata
-    
-    def is_valid(self):
+        
+    def validate(
+            self, 
+            ignored_codes = [],
+            ignored_fields = [],
+            ignored_files = [],
+            print_errors=True, 
+            print_warnings=True
+        ):
         """
-        Returns True if your BIDS dataset is valid (i.e., has no errors). 
+        API to run the BIDS validator
+
+        Args:
+            ignored_codes (list of str): List of ignored error codes
+            ignored_fields (list of str): List of ignored metadata fields
+            ignored_files (list of str): List of ignored files
+            print_errors (bool): If True print all errors
+            print_errors (warnings): If True print all warnings
+        Returns:
+            err (list of objects): List of all errors
+            war (list of objects): List of all warnings
+            valid (bool): True if there are no errors
         
         """
 
-        errors, _ = run_bids_validator(
-            self.root + "/", 
-            print_errors=False, 
-            print_warnings=False
+        err, war = run_bids_validator(
+            f"{self.root}/",
+            ignored_codes=ignored_codes,
+            ignored_fields=ignored_fields,
+            ignored_files=ignored_files,
+            print_errors=print_errors,
+            print_warnings=print_warnings
         )
 
-        if len(errors) == 0:
-            return True
-        else:
-            return False
+        valid = True if len(err) == 0 else False
+
+        return err, war, valid   
     
     def _get_bids_version(self):
         """
@@ -319,6 +343,18 @@ class bids_emg_recording(bids_dataset):
     INHERITABLE_LEVELS = ["dataset" , "task", "subject", "session"]
     # Define permissible raw data formats
     FILE_FORMATS = ["edf", "edf+", "bdf", "bdf+"]
+    # Predefined fields in tabular columns
+    CHANNELS_FIELDS = [
+        "name", "type", "units", "description", "sampling_frequency",
+        "signal_electrode", "reference", "group", "target_muscle",
+        "placement_scheme", "placement_description", "interelectrode_distance", 
+        "low_cutoff", "high_cutoff", "notch", "status", "status_description"
+    ]
+    ELECTRODES_FIELDS = [
+        "name", "x", "y", "z", "coordinate_system", "type",
+        "material", "impedance", "group"
+    ]
+    EVENTS_FIELDS = ["onset", "duration"]
 
     def __init__(
         self,
@@ -372,6 +408,7 @@ class bids_emg_recording(bids_dataset):
         self.recording_label = recording_label
         self.datatype = datatype
         #self.emg_data = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        self.fsamp = fsamp
         self.emg_data = np.empty([1,1])
         if fileformat in self.FILE_FORMATS:
             self.fileformat = fileformat
@@ -380,12 +417,14 @@ class bids_emg_recording(bids_dataset):
 
         # Initialize metadata
         self.channels = pd.DataFrame(columns=["name", "type", "units"])
+        self.channels_sidecar = {}
         self.electrodes = pd.DataFrame(
             columns=["name", "x", "y", "z", "coordinate_system"]
         )
+        self.electrodes_sidecar = {}
         self.emg_sidecar = self._init_emg_sidecar(fsamp, plfreq)
         self.coord_sidecar = {
-            "mycoordsystemname": {
+            "templateCoordSystemName": {
                 "EMGCoordinateSystem": "Other",
                 "EMGCoordinateSystemDescription": "Free-form text description of the coordinate system", 
                 "EMGCoordinateUnits": "mm"
@@ -615,16 +654,16 @@ class bids_emg_recording(bids_dataset):
         filename = self._get_bids_filename("emg","json")
         with open(filename, "w") as f:
             json.dump(self.emg_sidecar, f)
-
+        
         filename = self._get_bids_filename("electrodes","tsv")
         if len(self.electrodes) > 0:
             self.electrodes.to_csv(filename, sep="\t", index=False, header=True, na_rep="n/a")
-
-        filename = self._get_bids_filename("space", None)
-        for name, metadata in self.coord_sidecar.items():
-            filename2 = f"{filename}-{name}_coordsystem.json"
-            with open(filename2, "w") as f:
-                json.dump(metadata, f)
+            # Coordinate systems metadata is only needed if the electrodes file exists
+            filename = self._get_bids_filename("space", None)
+            for name, metadata in self.coord_sidecar.items():
+                filename2 = f"{filename}-{name}_coordsystem.json"
+                with open(filename2, "w") as f:
+                    json.dump(metadata, f)
 
         filename = self._get_bids_filename("emg", self.fileformat)
         #self.emg_data.write(filename)
@@ -634,7 +673,7 @@ class bids_emg_recording(bids_dataset):
             channel_names = self.channels["name"].values.tolist()
         signal_headers = make_signal_headers(
             channel_names, 
-            sample_frequency=self.emg_sidecar["SamplingFrequency"]
+            sample_frequency=self.fsamp
         )
         write_edf(filename, self.emg_data, signal_headers)
 
@@ -726,6 +765,11 @@ class bids_emg_recording(bids_dataset):
         if field_name == "channels":
             # Drop duplicates
             self.channels = self.channels.drop_duplicates(subset="name", keep="last")
+            for col in self.channels.columns:
+                if (col not in self.CHANNELS_FIELDS and col not in self.channels_sidecar):
+                    warnings.warn(
+                        f"Field {col} needs to be defined in channels_sidecar."
+                    )
         elif field_name == "electrodes":
             # Drop duplicates
             self.electrodes = self.electrodes.drop_duplicates(
@@ -735,6 +779,20 @@ class bids_emg_recording(bids_dataset):
             if "z" in self.electrodes.columns:
                 col = self.electrodes.pop("z")
                 self.electrodes.insert(3, "z", col)
+            for col in self.electrodes.columns:
+                if (col not in self.ELECTRODES_FIELDS and col not in self.electrodes_sidecar):
+                    warnings.warn(
+                        f"Field {col} needs to be defined in electrodes_sidecar."
+                    )    
+        elif field_name == "events":  
+            # Drop duplicates
+            self.events = self.events.drop_duplicates(keep="last")
+            for col in self.events.columns:
+                if (col not in self.EVENTS_FIELDS and col not in self.events_sidecar):
+                    warnings.warn(
+                        f"Field {col} needs to be defined in events_sidecar."
+                    )
+                  
 
     def set_data(self, field_name, mydata, fsamp):
         """
@@ -756,6 +814,7 @@ class bids_emg_recording(bids_dataset):
 
         if field_name == "emg_data":
             self.emg_sidecar["SamplingFrequency"] = fsamp
+            self.fsamp = fsamp
 
 
     def read_data_frame(self, df, idx):
@@ -804,7 +863,7 @@ class bids_neuromotion_recording(bids_emg_recording):
         datasetname="dataset_name",
         fileformat="edf",
         fsamp=2048,
-        plfreq=50,
+        plfreq="n/a",
         overwrite=False,
         inherited_metadata=None,
     ):
@@ -825,7 +884,7 @@ class bids_neuromotion_recording(bids_emg_recording):
             root=root,
             datasetname=datasetname,
             fsamp=fsamp,
-            plfreq="n/a",
+            plfreq=plfreq,
             fileformat=fileformat,
             overwrite=overwrite,
             inherited_metadata=inherited_metadata,
@@ -918,6 +977,7 @@ class bids_decomp_derivatives(bids_emg_recording):
         "*_sources.edf",
         "*_sources.bdf",
         "*_sources.json",
+        "*_log.json"
         "descriptions.tsv"
     ]
 
@@ -990,8 +1050,9 @@ class bids_decomp_derivatives(bids_emg_recording):
         self.pipelinename = pipelinename
 
         #self.source = Edf([EdfSignal(np.zeros(1), sampling_frequency=1)])
+        self.fsamp = fsamp
         self.source = np.empty([1, 1])
-        self.events = pd.DataFrame(columns=["onset", "duration", "sample", "unit_id", "event_description"])
+        self.events = pd.DataFrame(columns=["onset", "duration", "sample", "unit_id", "description"])
         self.events_sidecar = self._init_event_sidecar()
         self.descriptions = pd.DataFrame(columns=["desc_id", "description"])
         self.descriptions.loc[0, "desc_id"] = "decomposed"
@@ -1007,6 +1068,7 @@ class bids_decomp_derivatives(bids_emg_recording):
                 "Name": pipelinename
             }]
         }
+        self.log_sidecar = {}
 
     def _init_event_sidecar(self):
         """
@@ -1031,7 +1093,7 @@ class bids_decomp_derivatives(bids_emg_recording):
                 "Description": "Unique identifier (integer value) of the motor unit corresponding to the detected spike.",
                 "Unit": "Integer-based ID"
             },
-            "event_description": {
+            "description": {
                 "Description": "Free text event description."
             }
         }
@@ -1063,17 +1125,21 @@ class bids_decomp_derivatives(bids_emg_recording):
         self.events.to_csv(
             name + "events.tsv", sep="\t", index=False, header=True, na_rep="n/a"
         )
-        # write *_pipeline.json
+        # write *_sources.json
         fname = name + "sources.json"
         with open(fname, "w") as f:
             json.dump(self.source_sidecar, f)
+        # write *_log.json    
+        fname = name + "log.json"
+        with open(fname, "w") as f:
+            json.dump(self.log_sidecar, f)    
         # write *_desc-decomposed_emg.edf file
         filename = f"{name}sources.{self.fileformat}"
         #self.emg_data.write(filename)
         channel_names = [f"Unit_{i}" for i in range(self.source.shape[0])]
         signal_headers = make_signal_headers(
             channel_names, 
-            sample_frequency=self.source_sidecar["SamplingFrequency"]
+            sample_frequency=self.fsamp
         )
         write_edf(filename, self.source, signal_headers)
         #self.source.write(name + self.datatype + self.fileformat)
@@ -1124,11 +1190,16 @@ class bids_decomp_derivatives(bids_emg_recording):
         fname = name + "events.tsv"
         if os.path.isfile(fname):
             self.events = pd.read_table(fname, on_bad_lines="warn")
-        # read *_pipeline.json
+        # read *_sources.json
         fname = name + "sources.json"
         if os.path.isfile(fname):
             with open(fname, "r") as f:
                 self.source_sidecar = json.load(f)
+        # read *_log.json
+        fname = name + "log.json"
+        if os.path.isfile(fname):
+            with open(fname, "r") as f:
+                self.source_sidecar = json.load(f)        
         # read *.edf file
         fname = name + "sources" + self.fileformat
         if os.path.isfile(fname):
@@ -1180,6 +1251,7 @@ class bids_decomp_derivatives(bids_emg_recording):
         super().set_data(field_name, mydata, fsamp)
 
         if field_name == "source":
+            self.fsamp = fsamp
             self.source_sidecar["SamplingFrequency"] = fsamp
             self.source_sidecar["NumberOfSources"] = mydata.shape[0]
 
@@ -1189,7 +1261,8 @@ def run_bids_validator(
         ignored_fields = [],
         ignored_files = [],
         print_errors=True, 
-        print_warnings=True):
+        print_warnings=True
+    ):
     """
     API to the official BIDS validator.
 

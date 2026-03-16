@@ -349,7 +349,7 @@ for i in np.arange(n_sub):
 # ------------------------------------------ #
 # ---------  Validate outputs -------------- #
 # ------------------------------------------ #
-err, warn = Caillet_2023.validate(
+err, warn, _ = Caillet_2023.validate(
     print_errors=True,
     print_warnings=True,
     ignored_codes=["TSV_COLUMN_TYPE_REDEFINED"],

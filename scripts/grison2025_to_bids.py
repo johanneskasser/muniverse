@@ -341,7 +341,7 @@ for i in np.arange(n_sub):
 # ---------  Validate outputs -------------- #
 # ------------------------------------------ #
 
-err, warn = Grison_2025.validate(
+err, warn, _ = Grison_2025.validate(
     print_errors=True,
     print_warnings=True,
     ignored_codes=["TSV_COLUMN_TYPE_REDEFINED"],
