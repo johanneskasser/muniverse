@@ -20,7 +20,6 @@ class bids_dataset:
         self, 
         datasetname="dataset_name", 
         root="./", 
-        n_digits=2, 
         overwrite=False
     ):
 
@@ -29,17 +28,21 @@ class bids_dataset:
         self.dataset_sidecar = {
             "Name": datasetname,
             "BIDSVersion": self._get_bids_version(),
+            "DatasetType": "raw",
+            "License": "The license for the dataset.",
+            "Authors": ["Author 1", "Author 2", "..."]
         }
         self.readme = """# Some BIDS Dataset
 
-        Your dataset description goes here
+        README is a required text file and should describe the dataset in more detail.
+
+        The README file should be structured such that the dataset content can be easily understood.
 
         """ 
         self.subjects_sidecar = self._set_participant_sidecar()
         self.subjects_data = pd.DataFrame(
             columns=["participant_id", "age", "sex", "handedness", "weight", "height"]
         )
-        self.n_digits = n_digits
         self.overwrite = overwrite
 
     def write(self):
@@ -181,7 +184,7 @@ class bids_dataset:
 
         Args: 
             file (str): BIDS filename
-            key (str): key from which the label is extracted (e.g., "sub" or "task")
+            key (str): key from which the label is extracted (e.g., "sub", "task" or "run")
 
         Returns: 
             label (str): label corresponding to the requested BIDS key
@@ -351,7 +354,8 @@ class bids_emg_recording(bids_dataset):
 
     # Define valid metadata files that can be inherited and valid inheritance levels
     INHERITABLE_FILES = [
-        "electrodes.tsv", "electrodes.json", "space", "events.tsv", "events.json"
+        "electrodes.tsv", "electrodes.json", 
+        "coordsystem.json", "events.tsv", "events.json"
     ]
     INHERITABLE_LEVELS = ["dataset" , "task", "subject", "session"]
     # Define permissible raw data formats
@@ -495,7 +499,11 @@ class bids_emg_recording(bids_dataset):
 
 
         # Set inheritance flags
-        self.inherited_metadata = {f: True for f in metadata_files}
+        self.inherited_metadata = {
+            ("space" if f == "coordsystem.json" else f): True
+            for f in metadata_files
+        }
+        #self.inherited_metadata = {f: True for f in metadata_files}
         self.inherited_levels = {f: inherited_level[i] for i, f in enumerate(metadata_files)}
 
     def _get_bids_filename(self, extension):
@@ -638,6 +646,7 @@ class bids_emg_recording(bids_dataset):
             "EMGReference": "Description of the approach to signal referencing",
             "SamplingFrequency": fsamp,
             "PowerLineFrequency": plfreq,
+            "RecordingDuration": 0,
             "SoftwareFilters": "Object of temporal software filters applied, or n/a if the data is not available",
             "RecordingType": "Data continuity (continuous, epoched or discontinuous)",
         }
@@ -1095,7 +1104,8 @@ class bids_decomp_derivatives(bids_emg_recording):
         self.descriptions.loc[0, "description"] = "estimated spiking motor unit activity"
         self.source_sidecar = {
             "SamplingFrequency": fsamp,
-            "NumberOfSources": 1
+            "NumberOfSources": 0,
+            "RecordingDuration": 0
         }
         self.dataset_sidecar = {
             "Name": datasetname + "-" + pipelinename,
@@ -1103,7 +1113,9 @@ class bids_decomp_derivatives(bids_emg_recording):
             "DatasetType": "derivative",
             "GeneratedBy": [{
                 "Name": pipelinename
-            }]
+            }],
+            "License": "The license for the dataset.",
+            "Authors": ["Author 1", "Author 2", "..."]
         }
         self.log = {}
 
