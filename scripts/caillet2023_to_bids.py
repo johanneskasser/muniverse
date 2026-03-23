@@ -361,7 +361,7 @@ for i in np.arange(n_sub):
 
         # Make a recording and add data and metadata
         emg_recording = bids_emg_recording(
-            dataset_config=Caillet_2023,
+            parent_dataset=Caillet_2023,
             subject_label=str(i+1).zfill(2), 
             task_label=task_label, 
             datatype="emg",

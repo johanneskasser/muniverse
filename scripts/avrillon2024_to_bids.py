@@ -469,7 +469,7 @@ for i in np.arange(len(sub_id)):
 
         # Make a recording and add data and metadata
         emg_recording = bids_emg_recording(
-            dataset_config=Avrillon_2024,
+            parent_dataset=Avrillon_2024,
             subject_label=str(sub_id[i]).zfill(2), 
             task_label=task_label, 
             datatype="emg",

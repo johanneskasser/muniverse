@@ -390,7 +390,7 @@ class bids_emg_recording(bids_dataset):
         overwrite=False,
         inherited_metadata=None,
         inherited_level=None,
-        dataset_config=None
+        parent_dataset=None
     ):
 
         super().__init__(
@@ -399,10 +399,10 @@ class bids_emg_recording(bids_dataset):
             overwrite=overwrite,
         )
 
-        if isinstance(dataset_config, bids_dataset):
-            self.root = dataset_config.root
-            self.datasetname = dataset_config.datasetname
-            self.subjects_data = dataset_config.subjects_data
+        if isinstance(parent_dataset, bids_dataset):
+            self.root = parent_dataset.root
+            self.datasetname = parent_dataset.datasetname
+            self.subjects_data = parent_dataset.subjects_data
 
         # Check if the function arguments are valid
         self._validate_arguments(
@@ -904,7 +904,7 @@ class bids_neuromotion_recording(bids_emg_recording):
         run_label="01",
         recording_label=None,
         datatype="emg",
-        dataset_config=None,
+        parent_dataset=None,
         root="./",
         datasetname="dataset_name",
         fileformat="edf",
@@ -926,7 +926,7 @@ class bids_neuromotion_recording(bids_emg_recording):
             run_label=run_label,
             recording_label=recording_label,
             datatype=datatype,
-            dataset_config=dataset_config,
+            parent_dataset=parent_dataset,
             root=root,
             datasetname=datasetname,
             fsamp=fsamp,
@@ -1031,7 +1031,7 @@ class bids_decomp_derivatives(bids_emg_recording):
         self,
         pipelinename="pipelineName",
         format="standalone",
-        rec_config=None,
+        parent_recording=None,
         datasetname="datasetName",
         datatype="emg",
         subject_label="01",
@@ -1076,18 +1076,18 @@ class bids_decomp_derivatives(bids_emg_recording):
         self.pipelinename = pipelinename
 
         # Adopt labels from an emg recording in BIDS format
-        if isinstance(rec_config, bids_emg_recording):
-            root = str(Path(rec_config.root).parent)
-            datasetname = rec_config.datasetname
-            self.root = rec_config.root
-            self.datasetname = rec_config.datasetname
-            self.subject_label = rec_config.subject_label
-            self.session_label = rec_config.session_label
-            self.task_label = rec_config.task_label
-            self.acq_label = rec_config.acq_label
-            self.run_label = rec_config.run_label
-            self.recording_label = rec_config.recording_label
-            self.datatype = rec_config.datatype
+        if isinstance(parent_recording, bids_emg_recording):
+            root = str(Path(parent_recording.root).parent)
+            datasetname = parent_recording.datasetname
+            self.root = parent_recording.root
+            self.datasetname = parent_recording.datasetname
+            self.subject_label = parent_recording.subject_label
+            self.session_label = parent_recording.session_label
+            self.task_label = parent_recording.task_label
+            self.acq_label = parent_recording.acq_label
+            self.run_label = parent_recording.run_label
+            self.recording_label = parent_recording.recording_label
+            self.datatype = parent_recording.datatype
 
         # Make a BIDS compatible folder structure
         if format == "standalone":
