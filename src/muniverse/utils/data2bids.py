@@ -504,7 +504,11 @@ class bids_emg_recording(bids_dataset):
             for f in metadata_files
         }
         #self.inherited_metadata = {f: True for f in metadata_files}
-        self.inherited_levels = {f: inherited_level[i] for i, f in enumerate(metadata_files)}
+        #self.inherited_levels = {f: inherited_level[i] for i, f in enumerate(metadata_files)}
+        self.inherited_levels = {
+            ("space" if f == "coordsystem.json" else f): inherited_level[i]
+            for i, f in enumerate(metadata_files)
+        }
 
     def _get_bids_filename(self, extension):
         """
