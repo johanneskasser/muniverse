@@ -148,12 +148,12 @@ def make_electrode_metadata(
                 df.loc[elecorode_idx, "y"] = yg[j] + y_shift
             elif i==1: # Lateral-Distal
                 x_shift = 100 if gridname == "GR04MM1305" else 200
-                y_shift = 16 if gridname == "GR04MM1305" else 32
+                y_shift = 36 if gridname == "GR04MM1305" else 72
                 df.loc[elecorode_idx, "x"] = x_shift - xg[j]
                 df.loc[elecorode_idx, "y"] = y_shift - yg[j]
             elif i==2: # Medial-Distal
                 x_shift = 100 if gridname == "GR04MM1305" else 200
-                y_shift = 36 if gridname == "GR04MM1305" else 72
+                y_shift = 16 if gridname == "GR04MM1305" else 32
                 df.loc[elecorode_idx, "x"] = x_shift - xg[j]
                 df.loc[elecorode_idx, "y"] = y_shift - yg[j]
             # Take care of the electrode index    
@@ -180,6 +180,8 @@ def get_events_tsv(requested_path, fsamp, mvc_level, mvc_rate):
     into a events.tsv file
     
     """
+
+    requested_path = requested_path.squeeze()
 
     columns = ["onset", "duration", "sample", "mvc_rate", "mvc_level", "event_type", "description"]
     df = pd.DataFrame(columns=columns)
@@ -220,7 +222,6 @@ def get_events_tsv(requested_path, fsamp, mvc_level, mvc_rate):
     idx_2 = int((mvc_level - b1) / m1)
     idx_3 = int((mvc_level - b2) / m2)
     idx_4 = int((0 - b2) / m2)
-    #t_4 = (path_0 - b2) / m2
 
     df.loc[len(df)] = [
         np.round(idx_1/fsamp,6), 0, 
@@ -274,7 +275,7 @@ ngrids = 4
 # List of subjects 
 sub_id = [1, 2, 3, 4, 5, 6, 7, 8, 
           11, 12, 13, 14, 15, 16, 17, 18]
-sub_id = [1]
+#sub_id = [4]
 # Number of subjects
 n_sub = len(sub_id)
 
@@ -295,19 +296,54 @@ readme = """
 # Avrillon et al 2024: HDsEMG recordings
 
 BIDS-formatted version of the HDsEMG dataset published in *[Avrillon et al. 2024](https://doi.org/10.7554/eLife.97085.3)*. 
-Sixteen subjects performed a series of submaximal (10-80 percent MVC) isometric ankle 
-dorsiflexions or isometric knee extensions. EMG signals were recorded from either 
-the right  tibialis anterior or the right vasutus lateralis muscle using four arrays 
+Two experimental sessions consisted of either a series of submaximal (10-80 percent MVC) 
+isometric ankle dorsiflexions or isometric knee extensions. EMG signals were recorded from 
+either the tibialis anterior (TA) or the vastus lateralis (VL) muscles using four arrays 
 of 64 surface electrodes for a total of 256 electrodes.
 
-# Coordinate systems
+### Population
+16 young individuals volunteered to participate either in the experiment on the 
+tibialis anterior (n=8; age: 27 +/- 3) or on the vastus lateralis (n=8; age: 27 +/- 10).
+
+### Electrode placement
+Surface EMG signals were recorded from the TA or the VL using 4 two-dimensional arrays of 
+64 electrodes (GR04MM1305 for the TA; GR08MM1305 for the VL, 13×5 gold-coated electrodes with 
+one electrode absent on a corner; interelectrode distance: 4 and 8 mm, respectively; OT Bioelettronica, Italy). 
+The grids were positioned over the muscle bellies to cover the largest surface while staying away from 
+the boundaries of the muscle identified by manual palpation. Before placing the electrodes, the 
+skin was shaved and cleaned with an abrasive pad and water. A biadhesive foam layer was used to 
+hold each array of electrodes onto the skin, and conductive paste filled the cavities of the 
+adhesive layers to make skin-electrode contact.
+
+### Tibialis anterior: ankle dorsiflexions
+For the session of ankle dorsiflexions, participants sat on a massage table with the 
+hips flexed at 45 degree, 0 degree being the hip neutral position, and the knees fully extended. 
+The foot of the dominant leg (right in all participants) was fixed onto the pedal of an 
+ankle dynamometer (OT Bioelettronica, Turin, Italy) positioned at 30 degree in the plantarflexion 
+direction, 0 degree being the foot perpendicular to the shank. The thigh and the foot were 
+fixed with inextensible Velcro straps. Force signals were recorded with a load cell 
+(CCT Transducer s.a.s, Turin, Italy) connected in-series to the pedal using the same 
+acquisition system as for the EMG recordings (EMG-Quattrocento; OT Bioelettronica, Italy).
+
+### Vastus lateralis: knee extensions
+For the session of knee extensions, participants sat on an instrumented chair with the hips 
+flexed at 85 degree, 0 degree being the hip neutral position, and the knees flexed at 85 degree, 
+0 degree being the knees fully extended. The torso and the thighs were fixed to the chair with 
+Velcro straps and the tibia were positioned against a rigid resistance connected to force sensors 
+(Metitur, Jyvaskyla, Finland). The force signals were recorded using the same acquisition 
+system as for the EMG recordings.
+
+### Coordinate systems
 All electrode coordinates (reported in mm) have been converted to a common reference 
 frame corresponding to the first EMG-array (*space-grid1*). 
 The positions of the reference and ground electrodes are reported in a seperate 
-coordinate system (*space-lowerLeg*) reported in percent of the lower leg length. 
+coordinate system (*space-lowerLeg*) reported in percent of the lower leg length (knee-to-ankle). 
 
-# Conversion
-The dataset has been converted semi-automatically using the *MUniverse* software.
+### Missing data
+Contraction intensities 50, 60 and 70 % MVC are missing for subject 15.
+
+### Conversion
+The dataset has been converted semi-automatically using the [*MUniverse*](https://github.com/dfarinagroup/muniverse/tree/main) software.
 See *dataset_description.json* for further details.
 
 """
@@ -389,6 +425,14 @@ for i in np.arange(len(sub_id)):
             muscle = 'right vastus lateralis'
             grid   = 'GR08MM1305'
             ied    = 8
+
+        # Get the duration of the isometric plateau
+        if mvc_level >= 70:
+            l_plateau = 10
+        elif mvc_level >= 50:
+            l_plateau = 15
+        else:
+            l_plateau = 20   
       
         # Load data
         filename = sourcepath + filelist[j]
@@ -417,8 +461,9 @@ for i in np.arange(len(sub_id)):
         coordsystem_metadata = manual_metadata["CoordSystemSidecar"] 
         # emg sidecar metadata
         emg_sidecar = manual_metadata["EMGSidecar"] 
-        emg_sidecar["TaskName"] = task_label
         emg_sidecar["RecordingDuration"] = emg_data.shape[1]/fsamp
+        emg_sidecar["TaskName"] = task_label
+        emg_sidecar["TaskDescription"] = f"Trapezoidal contraction: MVC level: {mvc_level} % MVC; MVC rate during ramps: 5 % MVC / s; plateau duration: {l_plateau} s."
         # events metadata
         events = get_events_tsv(target, fsamp, mvc_level, mvc_rate=5)
 
@@ -427,9 +472,9 @@ for i in np.arange(len(sub_id)):
             dataset_config=Avrillon_2024,
             subject_label=str(sub_id[i]).zfill(2), 
             task_label=task_label, 
-            datatype='emg',
-            inherited_metadata=["electrodes", "space"],
-            inherited_level=["subject", "subject"],
+            datatype="emg",
+            inherited_metadata=["electrodes.tsv", "coordsystem.json", "events.json"],
+            inherited_level=["subject", "subject", "dataset"],
             overwrite=False
         )
         

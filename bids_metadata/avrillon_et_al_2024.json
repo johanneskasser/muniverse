@@ -31,7 +31,7 @@
         ],
         "GeneratedBy": [{
             "Name": "MUniverse", 
-            "Version": "0.1.0", 
+            "Version": "1.0", 
             "CodeURL": "https://github.com/dfarinagroup/muniverse/scripts/",
             "ScriptName": "avrillon2024_to_bids.py",
             "Description": "Semi-automated conversion of the original data into BIDS format"    
@@ -75,9 +75,8 @@
             }
         },
         "RecordingType": "continuous",
-        "SetUpDescription": "The participants sat on a massage table with the hips flexed at 45 degree, 0 degree being the hip neutral position, and the knees fully extended. The foot of the dominant leg (right in all participants) was fixed onto the pedal of an ankle dynamometer (OT Bioelettronica, Turin, Italy) positioned at 30 degree in the plantarflexion direction, 0 degree being the foot perpendicular to the shank. The thigh and the foot were fixed with inextensible Velcro straps. Force signals were recorded with a load cell (CCT Transducer s.a.s, Turin, Italy) connected in-series to the pedal using the same acquisition system as for the EMG recordings (EMG-Quattrocento; OT Bioelettronica, Italy).",
-        "TaskName": "Isometric-ankle-dorsiflexion",
-        "TaskDescription": "The experimental session began with a warm-up that consisted of submaximal isometric contractions from 50% to 80% of the subjective MVC. Then, participants performed two MVC with 2 min of rest in between. The maximal torque was considered as the highest torque value recorded over an average window of 250 ms. The rest of the session consisted of a series of eight submaximal isometric contractions performed at 10–80% of the MVC with 10% MVC increments. The pattern of the contractions followed a trapezoidal target displayed on a screen in real time with the force trace. Ramp-up and ramp-down phases were performed at a constant pace of 5% MVC/s. The force plateaus were maintained for either 10 s (70–80% MVC), 15 s (50–60% MVC), or 20 s (10–40% MVC). The contractions were separated by 90 s of rest and their order was randomised.",
+        "TaskName": "isometric",
+        "TaskDescription": "Isometric ramp-and-hold contraction",
         "Instructions": "Follow path provided via visual feedback.",
         "InstitutionName": "Imperial College London",
         "InstitutionAddress": "London W12 0BZ, United Kingdom",
@@ -87,13 +86,13 @@
     "CoordSystemSidecar":{
         "grid1": {
             "EMGCoordinateSystem": "Other", 
-            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: lateral -> medial; all local electrode coordinates (per grid) are mapped on a single global coordinate system.",
+            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; all local electrode coordinates (per grid) are mapped on a single global coordinate system.",
             "EMGCoordinateUnits": "mm",
             "AnchorElectrode": "E12 - Grid1"
         },
         "lowerLeg": {
             "EMGCoordinateSystem": "Other",
-            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: lateral -> medial; the coordinate system is located at the knee joint", 
+            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; the coordinate system is located at the knee joint", 
             "EMGCoordinateUnits": "percent"
         }
     }
