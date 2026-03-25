@@ -1114,15 +1114,14 @@ class bids_decomp_derivatives(bids_emg_recording):
             "NumberOfSources": 0,
             "RecordingDuration": 0
         }
+        name = f"{datasetname}-{pipelinename}" if format == "standalone" else f"{pipelinename} Outputs"
         self.dataset_sidecar = {
-            "Name": datasetname + "-" + pipelinename,
+            "Name": name,
             "BIDSVersion": self._get_bids_version(),
             "DatasetType": "derivative",
             "GeneratedBy": [{
                 "Name": pipelinename
-            }],
-            "License": "The license for the dataset.",
-            "Authors": ["Author 1", "Author 2", "..."]
+            }]
         }
         self.log = {}
 
@@ -1213,16 +1212,16 @@ class bids_decomp_derivatives(bids_emg_recording):
             level = self.inherited_levels[extension]
             if level == "dataset":
                 fname = ""
-                folder = self.root
+                folder = self.derivative_root
             elif level == "task":
                 fname = self.task_label
-                folder = self.root
+                folder = self.derivative_root
             elif level == "subject":
                 fname = f"sub-{self.subject_label}_"
-                folder = f"{self.root}sub-{self.subject_label}/{self.datatype}/"
+                folder = f"{self.derivative_root}sub-{self.subject_label}/{self.datatype}/"
             elif level == "session":
                 fname = f"sub-{self.subject_label}_ses-{self.session_label}_"
-                folder = f"{self.root}sub-{self.subject_label}/ses-{self.session_label}/{self.datatype}"
+                folder = f"{self.derivative_root}sub-{self.subject_label}/ses-{self.session_label}/{self.datatype}"
             fname = f"{fname}desc-{self.desc_label}_"    
            
         if extension is None:
