@@ -754,14 +754,14 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             with open(filename, "r") as f:
                 self.electrodes_sidecar = json.load(f)
-        else:
+        elif not set(self.electrodes.columns).issubset(self.ELECTRODES_FIELDS):
             filename = self._find_inherited_file("electrodes.json")
             filename = filename[0] if filename else str()
             if os.path.isfile(filename):
                 with open(filename, "r") as f:
                     self.electrodes_sidecar = json.load(f)        
 
-        serach_parts = [Path(self._get_bids_filename(None)).name, "coordsystem"]
+        serach_parts = [Path(self._get_bids_filename("space")).name, "coordsystem"]
         filename = [f for f in Path(self.datapath).iterdir()
                     if all(part in f.name for part in serach_parts)]
         if len(filename) == 0:
