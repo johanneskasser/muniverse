@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 import h5py, os, json
-from muniverse.utils.data2bids import *
+from muniverse import __license__, __version__
+from muniverse.utils.bids_routines import *
 from pathlib import Path
 
 # ------------------------------------------ #
@@ -384,6 +385,8 @@ events_sidecar = {
 
 # Dictonary of dataset-level metadata 
 dataset_sidecar = manual_metadata["DatasetDescription"]
+dataset_sidecar["GeneratedBy"][0]["Version"] = __version__
+dataset_sidecar["GeneratedBy"][0]["License"] = __license__
 
 # Handle the dataset level metadata
 Avrillon_2024 = bids_dataset(

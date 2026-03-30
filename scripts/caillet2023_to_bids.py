@@ -3,8 +3,9 @@ import pandas as pd
 import json
 #import os
 #from edfio import *
-from muniverse.utils.data2bids import *
-from muniverse.utils.otb_io import open_otb, format_otb_channel_metadata
+from muniverse import __license__, __version__
+from muniverse.utils.bids_routines import *
+from muniverse.utils._otb_io import _open_otb, _format_otb_channel_metadata
 from pathlib import Path
 
 # ------------------------------------------ #
@@ -336,10 +337,10 @@ for i in np.arange(n_sub):
         # Import data from otb+ file
         ngrids = 4
         fname =  sourcepath + folder + filename
-        (data, metadata) = open_otb(fname, ngrids)
+        (data, metadata) = _open_otb(fname, ngrids)
 
         # channel metadata
-        ch_metadata = format_otb_channel_metadata(data,metadata,ngrids)
+        ch_metadata = _format_otb_channel_metadata(data,metadata,ngrids)
         ch_metadata.drop(columns="interelectrode_distance", axis=1, inplace=True)
         ch_metadata.loc[:255, "target_muscle"] = "right tibialis anterior"
         # electrode metadata

@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 import json
 from scipy.signal import find_peaks
-from muniverse.utils.data2bids import *
-from muniverse.utils.otb_io import open_otb, format_otb_channel_metadata
+from muniverse import __license__, __version__
+from muniverse.utils.bids_routines import *
+from muniverse.utils._otb_io import _open_otb, _format_otb_channel_metadata
 from pathlib import Path
 
 # ------------------------------------------ #
@@ -297,6 +298,8 @@ sourcepath = str(Path.home()) + '/Downloads/S1/'
 subjects_data = {'participant_id': ['sub-01'], 
             'sex': ['n/a']}
 dataset_sidecar = manual_metadata["DatasetDescription"] #dataset_sidecar_template(ID='Caillet2023')
+dataset_sidecar["GeneratedBy"][0]["Version"] = __version__
+dataset_sidecar["GeneratedBy"][0]["License"] = __license__
 
 Grison_2025 = bids_dataset(datasetname='Grison_et_al_2025', root=str(Path.home()) + '/Downloads/')
 Grison_2025.set_metadata(field_name='subjects_data', source=subjects_data)
@@ -322,10 +325,10 @@ for i in np.arange(n_sub):
         # Import daata from otb+ file
         nadapter = 9
         fname =  sourcepath + str(mvc_levels[j]) + '/' + str(mvc_levels[j]) + 'mvc_semg.otb+'
-        (data, metadata) = open_otb(fname, nadapter)
+        (data, metadata) = _open_otb(fname, nadapter)
 
         # Get and write channel metadata
-        ch_metadata = format_otb_channel_metadata(data,metadata,nadapter)
+        ch_metadata = _format_otb_channel_metadata(data,metadata,nadapter)
         ch_metadata.drop(columns="interelectrode_distance", axis=1, inplace=True)
         ch_metadata = ch_metadata[
             ch_metadata['target_muscle'].str.contains('Tibialis Anterior|n/a')
