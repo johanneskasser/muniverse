@@ -8,6 +8,7 @@ import os
 import platform
 import subprocess
 import time
+from muniverse import __version__, __license__
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -21,11 +22,13 @@ class BaseMetadataLogger:
         self.start_time = datetime.now()
         self.log_data = {
             #"BIDSVersion": "1.11.1",
-            #"DatasetType": "derivative",
-            "PipelineDescription": {
+            "DatasetType": "derivative",
+            "Pipeline": {
                 "Name": "MUniverse",
-                "Version": "1.0.0",
-                "License": "GNU-GPLv3",
+                "Description": "Motor unit identification algorithm",
+                "Configuration": {},
+                #"Version": "1.0",
+                #"License": "GNU-GPLv3",
             },
             "GeneratedBy": [],
             "InputData": {},
@@ -266,9 +269,12 @@ class BaseMetadataLogger:
         name: str,
         url: str,
         commit: str,
+        version: Optional[str] = None,
         branch: Optional[str] = None,
         file: Optional[str] = None,
         license: Optional[str] = None,
+        container: Optional[dict] = None,
+        description: Optional[str] = None,
     ):
         """Add a generator to the GeneratedBy list.
 
@@ -280,13 +286,19 @@ class BaseMetadataLogger:
             file: Optional specific file responsible for generation
             license: Optional license
         """
-        generator = {"Name": name, "URL": url, "Commit": commit}
+        generator = {"Name": name, "CodeURL": url, "Commit": commit}
         if branch:
             generator["Branch"] = branch
         if file:
             generator["File"] = file
         if license:
             generator["License"] = license
+        if version:
+            generator["Version"] = version    
+        if container:
+            generator["Container"] = container
+        if description:
+            generator["Description"] = description      
         self.log_data["GeneratedBy"].append(generator)
 
 
@@ -297,7 +309,8 @@ class SimulationLogger(BaseMetadataLogger):
         super().__init__(run_id)
         # Update fields for simulation runs
         self.log_data["DatasetType"] = "raw"
-        self.log_data["PipelineDescription"]["Name"] += " Data Generation"
+        self.log_data["Pipeline"]["Name"] = " MUniverse-NeuroMotion"
+        self.log_data["Pipeline"]["Description"] = "EMG simulator"
 
         # Add simulation-specific fields
         self.log_data["InputData"] = {
@@ -314,12 +327,13 @@ class SimulationLogger(BaseMetadataLogger):
         package_root = self._get_package_root()
         muniverse_info = self._get_git_info(str(package_root))
         self.add_generated_by(
-            name="MUniverse Data Generation",
+            name="MUniverse",
             url=muniverse_info["URL"],
             commit=muniverse_info["Commit"],
             branch=muniverse_info["Branch"],
             file="muniverse/data_generation/generate_data.py",
-            license="MIT",  # TODO: Add license
+            version= __version__,
+            license= __license__, 
         )
 
         # Add NeuroMotion generator info
@@ -327,7 +341,7 @@ class SimulationLogger(BaseMetadataLogger):
             name="NeuroMotion",
             url="https://github.com/shihan-ma/NeuroMotion.git",
             commit="590369ec2f395e6e228aa9dc58bf0fb87a2c0329",
-            license="GPL-3.0 license",
+            license="GNU-GPLv3",
         )
 
     def set_config(self, config_content: Dict[str, Any]):
@@ -355,7 +369,7 @@ class AlgorithmLogger(BaseMetadataLogger):
         super().__init__()
 
         # Update fields for algorithm runs
-        self.log_data["PipelineDescription"]["Name"] += " Decomposition"
+        self.log_data["Pipeline"]["Name"] += " Decomposition"
 
         # Add algorithm-specific fields
         self.log_data["SourceDatasets"] = (
@@ -371,18 +385,20 @@ class AlgorithmLogger(BaseMetadataLogger):
             "Files": [],
             "Description": "Decomposition results and metadata",
         }
-        self.log_data["AlgorithmConfiguration"] = {}
+        #self.log_data["AlgorithmConfiguration"] = {}
         self.log_data["ProcessingSteps"] = []
 
         # Add MUniverse generator info
         package_root = self._get_package_root()
         muniverse_info = self._get_git_info(str(package_root))
         self.add_generated_by(
-            name="MUniverse Decomposition",
+            name="MUniverse",
+            version=__version__,
             url=muniverse_info["URL"],
             commit=muniverse_info["Commit"],
             branch=muniverse_info["Branch"],
             file="muniverse/algorithms/decomposition.py",
+            license=__license__,
         )
 
     def set_input_data(self, file_name: str, file_format: str):
@@ -393,7 +409,8 @@ class AlgorithmLogger(BaseMetadataLogger):
 
     def set_algorithm_config(self, config_content: Dict[str, Any]):
         """Set algorithm configuration."""
-        self.log_data["AlgorithmConfiguration"] = config_content
+        #self.log_data["AlgorithmConfiguration"] = config_content
+        self.log_data["Pipeline"]["Configuration"] = config_content
 
     def add_processing_step(self, step_name: str, details: Dict[str, Any]):
         """Add a processing step with its details."""
