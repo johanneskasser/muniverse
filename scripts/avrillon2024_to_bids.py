@@ -62,7 +62,7 @@ def make_channel_metadata(
     # Define the columns of the *_channels.tsv file
     columns = ['name', 'type', 'units', 'description', 'sampling_frequency', 
                 'signal_electrode', 'reference', 'group', 'target_muscle',
-                'interelectrode_distance', 'low_cutoff', 'high_cutoff', 'status']
+                'low_cutoff', 'high_cutoff', 'status']
     
     # Init dataframe containing the channels metadata
     df = pd.DataFrame(np.nan, index=range(64*ngrid + 2), columns=columns)
@@ -76,13 +76,12 @@ def make_channel_metadata(
         "reference": "string",
         "group": "string", 
         "target_muscle": "string", 
-        "interelectrode_distance": "float",
         "low_cutoff": "float", 
         "high_cutoff": "float", 
         "status": "string"
     })
     # Set channel names
-    df.loc[:df.shape[0], 'name'] = ['Ch' + str(i+1).zfill(2) for i in range(64*ngrid + 2)]
+    df.loc[:df.shape[0], 'name'] = ['Ch' + str(i+1).zfill(3) for i in range(64*ngrid + 2)]
     # All the EMG channels
     df.loc[:ngrid*64-1, 'type'] = 'EMG'
     df.loc[:ngrid*64-1, 'units'] = 'mV'
@@ -90,12 +89,11 @@ def make_channel_metadata(
     df.loc[:df.shape[0], 'sampling_frequency'] = fsamp
     df.loc[:ngrid*64-1, 'signal_electrode'] = ['E' + str(i+1).zfill(3) for i in range(64*ngrid)]
     df.loc[:ngrid*64-1, 'reference'] = 'R1'
-    df.loc[0:64*1-1, 'group'] = 'Grid1'
-    df.loc[64:64*2-1, 'group'] = 'Grid2'
-    df.loc[64*2:64*3-1, 'group'] = 'Grid3'
-    df.loc[64*3:64*4-1, 'group'] = 'Grid4'
+    df.loc[0:64*1-1, 'group'] = 'grid1'
+    df.loc[64:64*2-1, 'group'] = 'grid2'
+    df.loc[64*2:64*3-1, 'group'] = 'grid3'
+    df.loc[64*3:64*4-1, 'group'] = 'grid4'
     df.loc[:ngrid*64-1, 'target_muscle'] = muscle
-    df.loc[:ngrid*64-1, 'interelectrode_distance'] = IED
     df.loc[:ngrid*64-1, 'low_cutoff'] = 500
     df.loc[:ngrid*64-1, 'high_cutoff'] = 20
     df.loc[:df.shape[0], 'status'] = 'n/a'
@@ -461,7 +459,8 @@ for i in np.arange(len(sub_id)):
         coordsystem_metadata = manual_metadata["CoordSystemSidecar"] 
         # emg sidecar metadata
         emg_sidecar = manual_metadata["EMGSidecar"] 
-        emg_sidecar["RecordingDuration"] = emg_data.shape[1]/fsamp
+        #emg_sidecar["RecordingDuration"] = emg_data.shape[1]/fsamp
+        emg_sidecar["InterelectrodeDistance"] = ied
         emg_sidecar["TaskName"] = task_label
         emg_sidecar["TaskDescription"] = f"Trapezoidal contraction: MVC level: {mvc_level} % MVC; MVC rate during ramps: 5 % MVC / s; plateau duration: {l_plateau} s."
         # events metadata

@@ -398,12 +398,12 @@ for i in np.arange(n_sub):
             # Add the annotaed spike labels
             ref_labels = bids_decomp_derivatives(
                 parent_recording=emg_recording,
-                pipelinename="expertSpikeAnnotation",
+                pipelinename="Manual",
                 format="subdir",
                 inherited_metadata=["events.json"],
                 inherited_level=["subject"]
             )
-            pipeline_desc = "Expert annotated reference decomposition based on invasive EMG."
+            pipeline_desc = "Semi-automated expert-curated reference decomposition based on invasive EMG"
             ref_labels.dataset_sidecar["GeneratedBy"][0]["Description"] = pipeline_desc
             # Load data and reformat it to BIDS events format
             fname =  f"{sourcepath}{mvc_levels[j]}/{mvc_levels[j]}_spike_times.csv"
