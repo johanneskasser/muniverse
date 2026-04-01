@@ -23,7 +23,7 @@ dependencies = [
     "pandas",
     "scikit-learn",
     "easyDataverse",
-    "pyedflib,
+    "pyedflib",
     "python-dateutil",
     "bids-validator-deno",
 ]
