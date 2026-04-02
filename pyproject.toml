@@ -52,6 +52,7 @@ packages = [
     "muniverse.datasets",
     "muniverse.evaluation",
     "muniverse.utils",
+    "muniverse.data_generation",
 ]
 
 [tool.black]
