@@ -61,6 +61,8 @@ def decompose_scd(
     """
     # Initialize logger
     logger = AlgorithmLogger()
+    logger.log_data["Pipeline"]["Name"] = "MUniverse-SCD"
+    logger.log_data["Pipeline"]["Description"] = "Motor unit identification algorithm"
         
     if engine == "host":
         if not os.path.isdir(repo_path):
@@ -83,6 +85,7 @@ def decompose_scd(
             url="https://github.com/AgneGris/swarm-contrastive-decomposition.git",
             commit="632a9ad041cf957584926d6b5cc64b7fe741e9eb",
             license="Creative Commons Attribution-NonCommercial 4.0 International Public License",
+            container=logger._get_container_info(engine, container),
         )
     else:
         raise ValueError(f"Invalid engine {engine}")
@@ -223,6 +226,8 @@ def decompose_upperbound(
     """
     # Initialize logger
     logger = AlgorithmLogger()
+    logger.log_data["Pipeline"]["Name"] = "MUniverse-UpperBound"
+    logger.log_data["Pipeline"]["Description"] = "Upper bound prediction for linear motor unit identification algorithms"
     
     # Set input data information
     if metadata:
@@ -315,6 +320,8 @@ def decompose_cbss(
     """
     # Initialize logger
     logger = AlgorithmLogger()
+    logger.log_data["Pipeline"]["Name"] = "MUniverse-CBSS"
+    logger.log_data["Pipeline"]["Description"] = "Motor unit identification algorithm"
 
     # Set input data information
     if metadata:
@@ -393,6 +400,8 @@ def decompose_ae(
         and the logger data dict
     """
     logger = AlgorithmLogger()
+    logger.log_data["Pipeline"]["Name"] = "MUniverse-AE"
+    logger.log_data["Pipeline"]["Description"] = "Motor unit identification algorithm"
 
     # Input data metadata
     if metadata:

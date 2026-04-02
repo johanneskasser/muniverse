@@ -19,7 +19,7 @@
             "Engineering and Physical Sciences Research Council (EPSRC) Doctoral Prize Fellowship",
             "HybridNeuro (HORIZON-WIDERA-2021-ACCESS-03- 101079392)",
             "ECHOES (ERC Starting Grant 101077693)",
-            "Consolidación Investigadora grant (CNS2022-135366) funded by MCIN/AEI/10.13039/501100011033",
+            "Consolidacion Investigadora grant (CNS2022-135366) funded by MCIN/AEI/10.13039/501100011033",
             "NextGenerationEU/PRTR",
             "Non-Invasive Single Neuron Electrical Monitoring (NISNEM Technology) Grant EP/T020970/1)"
         ],
@@ -30,7 +30,7 @@
         ],
         "GeneratedBy": [{
             "Name": "MUniverse", 
-            "Version": "0.1.0", 
+            "Version": "1.0", 
             "CodeURL": "https://github.com/dfarinagroup/muniverse/scripts/",
             "ScriptName": "grison2025_to_bids.py",
             "Description": "Semi-automated conversion of the original data into BIDS format"    
@@ -51,7 +51,7 @@
         "EMGChannelCount": 128,
         "MISCChannelCount": 3,
         "Manufacturer": "OTBioelettronica",
-        "ManufacturerModelName": "Quattrocento",
+        "ManufacturersModelName": "Quattrocento",
         "SoftwareVersions": "OTBioLab+ v.1.5.6.0",
         "Gain": 150,
         "SoftwareFilters": "n/a",
@@ -70,7 +70,6 @@
         "RecordingType": "continuous",
         "SamplingFrequency": 10240,
         "PowerLineFrequency": 50,
-        "SetUpDescription": "The participant sat on a chair with the hips flexed at 30 degree, 0 degree being the hip neutral position, and their knees fully extended. We fixed the foot of the dominant leg (right in all participants) onto the pedal of a commercial dynamometer (OT Bioelettronica) positioned at 30 degree in the plantarflexion direction, 0 degree being the foot perpendicular to the shank. The thigh was fixed to the chair with an inextensible 3-cm-wide Velcro strap. The foot was fixed to the pedal with inextensible straps positioned around the proximal phalanx, metatarsal and cuneiform. Force signals were recorded with a load cell (CCT Transducer s.a.s.) connected in-series to the pedal using the same acquisition system as for the HD-EMG recordings (EMG-Quattrocento; OT Bioelettronica). The dynamometer was positioned accordingly to the participant’s lower limb length and secured to the massage table to avoid any motion during the contractions.",
         "TaskName": "Isometric-ankle-dorsiflexion",
         "TaskDescription": "The participant performed one, two, or three trapezoidal contractions at 10, 15, 20, 25, 30, 35, 40, 50, 60, and 70 percent MVC with 120 s of rest in between, consisting of linear ramps up and down performed at 5 percent per second and a plateau maintained for 20 s up to 30 percent MVC, 15 s for 35 percent and 40 percent MVC, and 10 s from 50 percent to 70 percent MVC. The order of the contractions was randomized.",
         "Instructions": "Follow path provided via visual feedback.",
@@ -80,10 +79,27 @@
     },
 
     "CoordSystemSidecar":{
-        "EMGCoordinateSystem": "Other", 
-        "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; all local electrode coordinates (per grid) are mapped on a single global coordinate system.",
-        "EMGCoordinateUnits": "mm",
-        "AnchorElectrode": "E12 - Grid1"
+        "grid1": {
+            "EMGCoordinateSystem": "Other", 
+            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; all local electrode coordinates are reported per grid.",
+            "EMGCoordinateUnits": "mm",
+            "ParentCoordinateSystem": "lowerLeg",
+            "AnchorElectrode": "E012",
+            "AnchorCoordinates": [25, 0, 0]
+        },
+        "grid2": {
+            "EMGCoordinateSystem": "Other", 
+            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; all local electrode coordinates are reported per grid.",
+            "EMGCoordinateUnits": "mm",
+            "ParentCoordinateSystem": "lowerLeg",
+            "AnchorElectrode": "E116",
+            "AnchorCoordinates": [50, 0, 0]
+        },
+        "lowerLeg": {
+            "EMGCoordinateSystem": "Other",
+            "EMGCoordinateSystemDescription": "x-axis: proximal -> distal; y-axis: medial -> lateral; the coordinate system is located at the knee joint", 
+            "EMGCoordinateUnits": "percent"
+        }
     }
 }
 

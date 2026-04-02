@@ -30,7 +30,7 @@ class bids_dataset:
             "BIDSVersion": self._get_bids_version(),
             "DatasetType": "raw",
             "License": "The license for the dataset.",
-            "Authors": ["Author 1", "Author 2", "..."]
+            "Authors": ["LastName, FirstName", "LastName2, FirstName2", "..."]
         }
         self.readme = """# Some BIDS Dataset
 
@@ -676,8 +676,23 @@ class bids_emg_recording(bids_dataset):
                 filename = self._get_bids_filename("channels.json") 
                 with open(filename, "w") as f:
                     json.dump(self.channels_sidecar, f, indent=4)
+        else:
+            warnings.warn(
+                "No channels metadata is provided." 
+                "However, *_channels.tsv is a REQUIRED EMG-BIDS file."
+            )
 
         filename = self._get_bids_filename("emg.json")
+        tmp = self._init_emg_sidecar(self.fsamp, 50)
+        keys = [
+            "EMGPlacementScheme", "EMGPlacementSchemeDescription", "EMGReference",
+            "SoftwareFilters", "RecordingType"
+        ]
+        for k in keys:
+            if k not in self.emg_sidecar:
+                warnings.warn(f"In *emg.json the REQUIRED field {k} is missing")
+            elif self.emg_sidecar[k] == tmp[k]:
+                warnings.warn(f"In *emg.json you are using field {k} from a placeholder template")
         with open(filename, "w") as f:
             json.dump(self.emg_sidecar, f, indent=4)
         
@@ -687,6 +702,11 @@ class bids_emg_recording(bids_dataset):
             # Coordinate systems metadata is only needed if the electrodes file exists
             filename = self._get_bids_filename("space")
             for name, metadata in self.coord_sidecar.items():
+                if name == "templateCoordSystemName":
+                    warnings.warn(
+                        "You are writing an arbitrary template coordinate system."
+                        "Make sure to update the coord_sidecar content correctly."
+                    )
                 filename2 = f"{filename}-{name}_coordsystem.json"
                 with open(filename2, "w") as f:
                     json.dump(metadata, f, indent=4)
@@ -708,6 +728,8 @@ class bids_emg_recording(bids_dataset):
                 sample_frequency=self.fsamp
             )
             write_edf(filename, self.emg_data, signal_headers)
+        else:
+            warnings.warn("Your emg_data field is empty.")
 
         # Write events.tsv and sidecar
         if len(self.events) > 0:
@@ -754,14 +776,14 @@ class bids_emg_recording(bids_dataset):
         if os.path.isfile(filename):
             with open(filename, "r") as f:
                 self.electrodes_sidecar = json.load(f)
-        else:
+        elif not set(self.electrodes.columns).issubset(self.ELECTRODES_FIELDS):
             filename = self._find_inherited_file("electrodes.json")
             filename = filename[0] if filename else str()
             if os.path.isfile(filename):
                 with open(filename, "r") as f:
                     self.electrodes_sidecar = json.load(f)        
 
-        serach_parts = [Path(self._get_bids_filename(None)).name, "coordsystem"]
+        serach_parts = [Path(self._get_bids_filename("space")).name, "coordsystem"]
         filename = [f for f in Path(self.datapath).iterdir()
                     if all(part in f.name for part in serach_parts)]
         if len(filename) == 0:
@@ -1465,21 +1487,3 @@ def run_bids_validator(
     valid = True if len(errors) == 0 else False    
 
     return errors, warnings, valid
-
-#def edf_to_numpy(edf_data, idx):
-#    """
-#    Output data of selcetd channels as numpy array
-#
-#    Args:
-#        edf_data (edf): Time series data in edf format
-#        idx (ndarray): Indices of the channels to be stored
-#
-#    Returns:
-#        np_data (np.ndarray): Time series data
-#    """
-#
-#    np_data = np.zeros((edf_data.signals[idx[0]].data.shape[0], len(idx)))
-#    for i in np.arange(len(idx)):
-#        np_data[:, i] = edf_data.signals[idx[i]].data
-#
-#    return np_data
