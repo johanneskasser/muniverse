@@ -8,7 +8,7 @@ import pandas as pd
 from dateutil import parser
 
 
-def open_otb(inputname, n_adapters):
+def _open_otb(inputname, n_adapters):
     """
     Reads otb+ files and outputs stored data and metadata.
     For further details regarding the structure of the OTB+ files see:
@@ -146,7 +146,7 @@ def open_otb(inputname, n_adapters):
     return (data.T, metadata)
 
 
-def format_otb_channel_metadata(data, metadata, n_adapters):
+def _format_otb_channel_metadata(data, metadata, n_adapters):
     """
     Extract channel metadata given the output of the open_otb function
 
